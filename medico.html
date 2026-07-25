@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clínica Saúde - Portal do Médico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 h-screen flex flex-col">
+
+    <nav class="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl font-bold text-blue-700">Clínica Saúde</span>
+            <span class="text-xs bg-green-100 text-green-800 font-semibold px-2.5 py-1 rounded-full">Portal do Médico</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="nome-medico-topo" class="font-semibold text-gray-600">A carregar perfil...</span>
+            <button onclick="terminarSessao()" class="bg-red-50 hover:bg-red-500 text-red-600 hover:text-white font-bold py-1.5 px-4 rounded-lg transition text-sm">Sair</button>
+        </div>
+    </nav>
+
+    <div class="max-w-6xl mx-auto p-8 w-full flex-grow space-y-8">
+        
+        <div class="flex justify-between items-end">
+            <div>
+                <h1 class="text-3xl font-extrabold text-gray-800">Bem-vindo, <span id="nome-medico-boas-vindas" class="text-green-600">...</span></h1>
+                <p class="text-gray-500 mt-1">Aqui está a sua agenda e os pacientes programados para hoje.</p>
+            </div>
+            <div class="text-right hidden md:block">
+                <span class="block text-sm text-gray-500 font-semibold">A sua Avaliação Atual</span>
+                <span id="estrelas-medico" class="bg-yellow-100 text-yellow-800 font-bold px-3 py-1 rounded-full border border-yellow-300 text-lg mt-1 inline-block">⭐ Calculando...</span>
+            </div>
+        </div>
+
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 class="text-xl font-bold text-gray-800">A Minha Agenda de Consultas</h2>
+                <button onclick="buscarMinhasConsultas()" class="text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 font-semibold py-2 px-4 rounded-lg transition">🔄 Atualizar Agenda</button>
+            </div>
+            <ul id="minhas-consultas" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <li class="text-gray-500 italic text-sm col-span-2" id="mensagem-agenda">A carregar a sua agenda...</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- MODAL DE EVOLUÇÃO CLÍNICA -->
+    <div id="modal-evolucao-clinica" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2 flex items-center gap-2">📝 Registro de Evolução Clínica</h2>
+            <form id="form-evolucao-clinica" class="space-y-4">
+                <input type="hidden" id="ev-agendamento-id">
+                <input type="hidden" id="ev-paciente-id">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase">Adesão ao Tratamento</label>
+                        <select id="ev-nota" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-sm focus:ring-blue-500"><option value="5">Excelente (5/5)</option><option value="4">Boa (4/5)</option><option value="3">Regular (3/5)</option><option value="2">Baixa (2/5)</option><option value="1">Não colaborativo (1/5)</option></select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">1. Queixa Principal (QP)</label>
+                    <textarea id="ev-queixa" rows="3" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-blue-500"></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">2. Conduta e Prescrição</label>
+                    <textarea id="ev-conduta" rows="3" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 focus:ring-blue-500"></textarea>
+                </div>
+                <div class="flex justify-end gap-3 pt-4 border-t">
+                    <button type="button" onclick="fecharModalEvolucao()" class="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition">Salvar no Prontuário</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL DO HISTÓRICO CLÍNICO (CORRIGIDO) -->
+    <div id="modal-historico-compartilhado" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div class="border-b pb-3 mb-4 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">📋 Histórico Clínico Compartilhado</h2>
+                <span id="hist-nome-paciente" class="text-sm font-semibold bg-blue-100 text-blue-800 py-1 px-3 rounded-full">...</span>
+            </div>
+            <div class="overflow-y-auto flex-grow pr-2 space-y-4" id="timeline-historico"></div>
+            <div class="flex justify-end pt-4 border-t mt-4">
+                <button type="button" onclick="fecharModalHistorico()" class="px-5 py-2.5 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300">Fechar Histórico</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE RESULTADOS DE EXAMES -->
+    <div id="modal-exames-paciente" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+            <div class="border-b pb-3 mb-4 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <span>🔬 Exames de <span id="ex-nome-paciente" class="text-purple-700"></span></span>
+                </h2>
+                <button onclick="fecharModalExames()" class="text-gray-500 hover:text-red-500 font-bold text-3xl leading-none">&times;</button>
+            </div>
+            
+            <div class="overflow-y-auto flex-grow pr-2 space-y-4" id="lista-exames-modal">
+                <p class="text-gray-500 italic text-sm text-center py-8">A carregar exames...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+        let medicoLogado = null;
+
+        function verificarAcesso() {
+            const token = localStorage.getItem('token');
+            const role = localStorage.getItem('role');
+            if (!token || role !== 'medico') { window.location.href = "login.html"; }
+        }
+
+        function obterEmailDoToken() {
+            const token = localStorage.getItem('token');
+            if (!token) return null;
+            try { return JSON.parse(atob(token.split('.')[1])).sub; } catch (e) { return null; }
+        }
+
+        async function carregarPerfil() {
+            const email = obterEmailDoToken();
+            if (!email) return;
+            try {
+                const resposta = await fetch(`${API_URL}/medicos/`);
+                if (!resposta.ok) throw new Error("Erro ao ligar ao servidor.");
+                const medicos = await resposta.json();
+                medicoLogado = medicos.find(m => m.email === email);
+                if (medicoLogado) {
+                    document.getElementById('nome-medico-topo').textContent = medicoLogado.nome;
+                    document.getElementById('nome-medico-boas-vindas').textContent = medicoLogado.nome;
+                    document.getElementById('estrelas-medico').textContent = `⭐ ${medicoLogado.avaliacao_media || '0.0'}`;
+                    buscarMinhasConsultas();
+                }
+            } catch (error) {
+                console.error(error);
+                document.getElementById('mensagem-agenda').innerHTML = '<span class="text-red-500 font-bold">❌ Erro de ligação ao servidor Python. Verifique o terminal.</span>';
+            }
+        }
+
+        async function buscarMinhasConsultas() {
+            if (!medicoLogado) return;
+            const lista = document.getElementById('minhas-consultas');
+            try {
+                const [resAgendamentos, resPacientes] = await Promise.all([
+                    fetch(`${API_URL}/agendamentos/`), 
+                    fetch(`${API_URL}/pacientes/`)
+                ]);
+                
+                if(!resAgendamentos.ok || !resPacientes.ok) throw new Error("Falha na API.");
+
+                const agendamentos = await resAgendamentos.json();
+                const pacientes = await resPacientes.json();
+                const meusAgendamentos = agendamentos.filter(ag => ag.medico_id === medicoLogado.id);
+
+                lista.innerHTML = '';
+                if (meusAgendamentos.length === 0) {
+                    lista.innerHTML = '<li class="text-gray-500 italic text-sm col-span-2">A sua agenda está livre no momento.</li>'; 
+                    return;
+                }
+                meusAgendamentos.sort((a, b) => new Date(a.data_hora) - new Date(b.data_hora));
+
+                meusAgendamentos.forEach(ag => {
+                    const paciente = pacientes.find(p => p.id === ag.paciente_id);
+                    const dataFormatada = new Date(ag.data_hora).toLocaleString('pt-PT', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+                    let badgeColor = ag.status === 'Confirmado' ? 'bg-blue-100 text-blue-800' : ag.status === 'Atendido' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+
+                    let botoesEspeciais = '';
+                    if (ag.status === 'Atendido') {
+                        botoesEspeciais = `<button onclick="abrirModalEvolucao(${ag.id}, ${ag.paciente_id})" class="mt-3 w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2 rounded-lg text-xs border border-blue-200 transition">📝 Registrar Evolução Clínica</button>`;
+                    }
+
+                    lista.innerHTML += `
+                        <li class="border border-gray-200 p-5 rounded-xl bg-white shadow-sm hover:shadow-md transition relative">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <div class="font-bold text-gray-800 text-lg">${paciente ? paciente.nome : 'Paciente'}</div>
+                                    <div class="text-xs text-gray-500 mt-1">📞 ${paciente ? paciente.telefone : ''}</div>
+                                </div>
+                                <span class="inline-block px-3 py-1 rounded-full text-xs font-bold ${badgeColor}">${ag.status}</span>
+                            </div>
+                            <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 my-3 flex items-center gap-2">
+                                <span class="text-xl">📅</span><span class="text-sm font-semibold text-gray-700">${dataFormatada}</span>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 mb-3">
+                                <button onclick="abrirHistoricoCompartilhado(${paciente.id}, '${paciente.nome}')" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg text-xs transition">📋 Histórico Clínico</button>
+                                <button onclick="abrirModalExames(${paciente.id}, '${paciente.nome}')" class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold py-2 rounded-lg text-xs border border-purple-200 transition">🔬 Ver Exames</button>
+                            </div>
+
+                            <label class="block text-xs font-bold text-gray-500 mb-1 uppercase">Mudar Estado</label>
+                            <select onchange="atualizarStatus(${ag.id}, this.value)" class="w-full text-sm font-semibold px-3 py-2 rounded-lg border border-gray-300 focus:ring-green-500">
+                                <option value="Confirmado" ${ag.status === 'Confirmado' ? 'selected' : ''}>⏳ Aguardando Atendimento</option>
+                                <option value="Atendido" ${ag.status === 'Atendido' ? 'selected' : ''}>✅ Consulta Finalizada</option>
+                                <option value="Cancelado" ${ag.status === 'Cancelado' ? 'selected' : ''}>❌ Cancelado</option>
+                            </select>
+                            ${botoesEspeciais}
+                        </li>
+                    `;
+                });
+            } catch (error) {
+                console.error(error);
+                lista.innerHTML = '<li class="text-red-500 font-bold text-sm col-span-2">❌ Erro ao carregar as consultas. Verifique se o servidor Python está a correr corretamente.</li>';
+            }
+        }
+
+        async function atualizarStatus(id, status_novo) {
+            try {
+                const resposta = await fetch(`${API_URL}/agendamentos/${id}/status?status_novo=${status_novo}`, { method: 'PATCH' });
+                if(resposta.ok) { buscarMinhasConsultas(); } else { alert("Erro ao atualizar."); }
+            } catch (error) {}
+        }
+
+        async function abrirModalExames(pacienteId, pacienteNome) {
+            document.getElementById('ex-nome-paciente').textContent = pacienteNome;
+            document.getElementById('modal-exames-paciente').classList.remove('hidden');
+            carregarExamesDoPaciente(pacienteId);
+        }
+
+        function fecharModalExames() { document.getElementById('modal-exames-paciente').classList.add('hidden'); }
+
+        async function carregarExamesDoPaciente(pacienteId) {
+            const lista = document.getElementById('lista-exames-modal');
+            lista.innerHTML = '<p class="text-center py-4">A carregar exames...</p>';
+            try {
+                const res = await fetch(`${API_URL}/exames/`);
+                const todosExames = await res.json();
+                const examesPaciente = todosExames.filter(e => e.paciente_id === pacienteId);
+
+                if (examesPaciente.length === 0) {
+                    lista.innerHTML = '<p class="text-gray-500 italic text-center py-4">Nenhum exame agendado para este paciente.</p>';
+                    return;
+                }
+
+                lista.innerHTML = '';
+                examesPaciente.forEach(ex => {
+                    const dataFormatada = new Date(ex.data_hora).toLocaleString('pt-PT');
+                    const badgeColor = ex.status === 'Analisado' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
+                    
+                    let areaResultado = '';
+                    if (ex.status !== 'Analisado' && !ex.resultado) {
+                        areaResultado = `<div class="mt-3"><textarea id="resultado-exame-${ex.id}" rows="2" placeholder="Digite o laudo / resultado deste exame..." class="w-full border border-gray-300 rounded p-2 text-sm focus:ring-purple-500 outline-none mb-2"></textarea><button onclick="salvarResultadoExame(${ex.id}, ${pacienteId})" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded text-xs transition">Salvar Laudo</button></div>`;
+                    } else {
+                        areaResultado = `<div class="mt-3 bg-white p-3 rounded border border-gray-200"><span class="block text-xs font-bold text-gray-500 uppercase mb-1">Laudo Médico:</span><p class="text-sm text-gray-800 font-mono">${ex.resultado}</p></div>`;
+                    }
+
+                    lista.innerHTML += `<div class="bg-purple-50 border border-purple-100 p-4 rounded-lg"><div class="flex justify-between items-start"><div><h3 class="font-bold text-purple-900 text-lg">${ex.tipo_exame}</h3><p class="text-xs text-gray-600 font-semibold mt-1">🧪 Lab: ${ex.laboratorio} | 📅 ${dataFormatada}</p></div><span class="px-3 py-1 rounded-full text-xs font-bold border border-current ${badgeColor}">${ex.status}</span></div>${areaResultado}</div>`;
+                });
+            } catch (e) { lista.innerHTML = '<p class="text-red-500 text-center">Erro ao carregar exames.</p>'; }
+        }
+
+        async function salvarResultadoExame(exameId, pacienteId) {
+            const resultadoTexto = document.getElementById(`resultado-exame-${exameId}`).value;
+            if (!resultadoTexto) return alert("Por favor, digite o resultado antes de salvar.");
+            try {
+                const res = await fetch(`${API_URL}/exames/${exameId}/resultado`, { method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ resultado: resultadoTexto }) });
+                if (res.ok) { alert("Laudo salvo com sucesso!"); carregarExamesDoPaciente(pacienteId); } else { alert("Erro ao salvar o resultado no servidor."); }
+            } catch (e) { alert("Erro de conexão."); }
+        }
+
+        function abrirModalEvolucao(agendamentoId, pacienteId) {
+            document.getElementById('ev-agendamento-id').value = agendamentoId; document.getElementById('ev-paciente-id').value = pacienteId; document.getElementById('modal-evolucao-clinica').classList.remove('hidden');
+        }
+        function fecharModalEvolucao() { document.getElementById('modal-evolucao-clinica').classList.add('hidden'); document.getElementById('form-evolucao-clinica').reset(); }
+        
+        document.getElementById('form-evolucao-clinica').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const relatoEstruturado = `QUEIXA PRINCIPAL:\n${document.getElementById('ev-queixa').value}\n\nCONDUTA:\n${document.getElementById('ev-conduta').value}`;
+            const dados = { agendamento_id: parseInt(document.getElementById('ev-agendamento-id').value), paciente_id: parseInt(document.getElementById('ev-paciente-id').value), medico_id: medicoLogado.id, nota_medico: 5, comentario_paciente: "Aguardando paciente...", nota_paciente: parseInt(document.getElementById('ev-nota').value), comentario_medico: relatoEstruturado };
+            try {
+                const res = await fetch(`${API_URL}/avaliacoes/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
+                if (res.ok) { alert("Gravado!"); fecharModalEvolucao(); } else { const err = await res.json(); alert("Atenção: " + err.detail); }
+            } catch (error) {}
+        });
+
+        // ==========================================================
+        // A MAGIA DA CORREÇÃO ESTÁ AQUI NESTA FUNÇÃO:
+        // ==========================================================
+        async function abrirHistoricoCompartilhado(pacienteId, pacienteNome) {
+            document.getElementById('hist-nome-paciente').textContent = pacienteNome; 
+            const timeline = document.getElementById('timeline-historico'); 
+            timeline.innerHTML = '<p class="text-center py-8">A carregar...</p>'; 
+            document.getElementById('modal-historico-compartilhado').classList.remove('hidden');
+            
+            try {
+                const [resAv, resMed, resAg] = await Promise.all([
+                    fetch(`${API_URL}/avaliacoes/`), 
+                    fetch(`${API_URL}/medicos/`), 
+                    fetch(`${API_URL}/agendamentos/`)
+                ]);
+                
+                const avaliacoes = await resAv.json(); 
+                const medicos = await resMed.json(); 
+                const agendamentos = await resAg.json();
+                
+                const historicoPaciente = avaliacoes.filter(av => {
+                    const ag = agendamentos.find(a => a.id === av.agendamento_id);
+                    return ag && ag.paciente_id === pacienteId && av.comentario_medico;
+                });
+                
+                timeline.innerHTML = '';
+                
+                if (historicoPaciente.length === 0) { 
+                    timeline.innerHTML = '<p class="text-center py-8 italic text-gray-500">Nenhum histórico registado para este paciente.</p>'; 
+                    return; 
+                }
+                
+                historicoPaciente.forEach(av => {
+                    const medico = medicos.find(m => m.id === av.medico_id); 
+                    const ag = agendamentos.find(a => a.id === av.agendamento_id);
+                    const dataFormatada = ag ? new Date(ag.data_hora).toLocaleDateString('pt-PT') : '';
+                    
+                    timeline.innerHTML += `
+                    <div class="border-l-4 border-blue-500 pl-4 py-2 bg-gray-50 rounded-r-lg p-4 mb-3 shadow-sm">
+                        <div class="flex justify-between items-center text-xs text-gray-500 mb-2">
+                            <span class="font-bold text-gray-700">👨‍⚕️ ${medico ? medico.nome : 'Médico da Clínica'}</span>
+                            <span class="bg-gray-200 py-0.5 px-2 rounded-full">📅 ${dataFormatada}</span>
+                        </div>
+                        <div class="text-sm text-gray-800 font-mono leading-relaxed">
+                            ${av.comentario_medico.replace(/\n/g, '<br>')}
+                        </div>
+                    </div>`;
+                });
+            } catch (error) {
+                console.error(error);
+                timeline.innerHTML = '<p class="text-red-500 text-center py-8 font-bold">Erro ao carregar o histórico.</p>';
+            }
+        }
+
+        function fecharModalHistorico() { document.getElementById('modal-historico-compartilhado').classList.add('hidden'); }
+        function terminarSessao() { localStorage.clear(); window.location.href = "login.html"; }
+        
+        window.onload = () => { verificarAcesso(); carregarPerfil(); };
+    </script>
+</body>
+</html>

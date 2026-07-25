@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clínica Saúde - Portal do Paciente</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+
+    <nav class="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl font-bold text-blue-700">Clínica Saúde</span>
+            <span class="text-xs bg-blue-100 text-blue-800 font-semibold px-2.5 py-1 rounded-full">Área do Paciente</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="nome-paciente-topo" class="font-semibold text-gray-600">A carregar perfil...</span>
+            <button onclick="terminarSessao()" class="bg-red-50 hover:bg-red-500 text-red-600 hover:text-white font-bold py-1.5 px-4 rounded-lg transition text-sm">
+                Sair
+            </button>
+        </div>
+    </nav>
+
+    <div class="max-w-6xl mx-auto p-8 space-y-8">
+        
+        <div>
+            <h1 class="text-3xl font-extrabold text-gray-800">Olá, <span id="nome-paciente-boas-vindas" class="text-blue-600">...</span>!</h1>
+            <p class="text-gray-500 mt-1">Gerencie as suas consultas, exames e avalie os seus médicos num único lugar.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-2 space-y-8">
+                
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h2 class="text-xl font-bold text-gray-800 mb-2">Médicos Recomendados para Si</h2>
+                    <p class="text-sm text-gray-500 mb-6">Ordenados por melhor avaliação e proximidade.</p>
+                    
+                    <div id="lista-medicos-recomendados" class="space-y-4">
+                        <p class="text-gray-500 italic">A procurar profissionais na sua área...</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4 text-purple-700">Agendar Novo Exame</h2>
+                    <form id="form-exame" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700">Tipo de Exame</label>
+                            <input type="text" id="ex-tipo" required placeholder="Ex: Hemograma, Raio-X" class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700">Laboratório</label>
+                            <input type="text" id="ex-lab" required placeholder="Ex: Lab Saúde" class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700">Data e Hora</label>
+                            <input type="datetime-local" id="ex-data" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <button type="submit" class="md:col-span-3 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition mt-2">
+                            Confirmar Agendamento de Exame
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+
+            <div class="space-y-8">
+                
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold text-gray-800 mb-4">As Minhas Consultas</h2>
+                    <ul id="minhas-consultas" class="space-y-4">
+                        <li class="text-gray-500 italic text-sm">Sem consultas agendadas.</li>
+                    </ul>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold text-purple-800 mb-4">Os Meus Exames</h2>
+                    <ul id="meus-exames" class="space-y-4">
+                        <li class="text-gray-500 italic text-sm">Nenhum exame agendado.</li>
+                    </ul>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <div id="modal-agendar" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Agendar com <span id="ag-nome-medico" class="text-blue-600"></span></h2>
+            <form id="form-marcar-consulta" class="space-y-4">
+                <input type="hidden" id="ag-medico-id">
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Escolha a Data</label>
+                    <input type="date" id="ag-data" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Horário Disponível</label>
+                    <select id="ag-horario" required disabled class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 disabled:bg-gray-200">
+                        <option value="">Selecione a data primeiro...</option>
+                    </select>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t">
+                    <button type="button" onclick="fecharModalAgendar()" class="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition">Confirmar Consulta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-avaliacao" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Avaliar Atendimento</h2>
+            <form id="form-avaliacao" class="space-y-4">
+                <input type="hidden" id="av-agendamento-id">
+                <input type="hidden" id="av-medico-id">
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Qual a sua nota para o médico?</label>
+                    <select id="av-nota" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-white">
+                        <option value="5">⭐⭐⭐⭐⭐ (5) Excelente</option>
+                        <option value="4">⭐⭐⭐⭐ (4) Muito Bom</option>
+                        <option value="3">⭐⭐⭐ (3) Bom</option>
+                        <option value="2">⭐⭐ (2) Regular</option>
+                        <option value="1">⭐ (1) Mau</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700">Deixe o seu comentário</label>
+                    <textarea id="av-comentario" rows="3" placeholder="Conte-nos como foi a sua experiência..." class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-white"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t">
+                    <button type="button" onclick="fecharModalAvaliacao()" class="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-yellow-950 font-bold rounded-lg transition">Enviar Avaliação</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+        let pacienteLogado = null;
+
+        // VERIFICAR AUTENTICAÇÃO AO ENTRAR
+        function verificarAcesso() {
+            const token = localStorage.getItem('token');
+            const role = localStorage.getItem('role');
+            if (!token || role !== 'paciente') {
+                alert("Acesso negado. Por favor, inicie sessão.");
+                window.location.href = "login.html";
+            }
+        }
+
+        function obterEmailDoToken() {
+            const token = localStorage.getItem('token');
+            if (!token) return null;
+            try {
+                const payloadBase64 = token.split('.')[1];
+                const payloadDecodificado = JSON.parse(atob(payloadBase64));
+                return payloadDecodificado.sub; 
+            } catch (e) { return null; }
+        }
+
+        // CARREGAR PERFIL DO PACIENTE
+        async function carregarPerfil() {
+            const email = obterEmailDoToken();
+            if (!email) return;
+
+            try {
+                const resposta = await fetch(`${API_URL}/pacientes/`);
+                const pacientes = await resposta.json();
+                
+                pacienteLogado = pacientes.find(p => p.email === email);
+
+                if (pacienteLogado) {
+                    document.getElementById('nome-paciente-topo').textContent = pacienteLogado.nome;
+                    document.getElementById('nome-paciente-boas-vindas').textContent = pacienteLogado.nome.split(' ')[0];
+                    
+                    buscarMedicosRecomendados();
+                    buscarMinhasConsultas();
+                    buscarMeusExames();
+                }
+            } catch (error) {}
+        }
+
+        // BUSCAR MÉDICOS RECOMENDADOS
+        async function buscarMedicosRecomendados() {
+            if (!pacienteLogado) return;
+            const lista = document.getElementById('lista-medicos-recomendados');
+            
+            try {
+                const resposta = await fetch(`${API_URL}/medicos/recomendados?latitude_paciente=${pacienteLogado.latitude}&longitude_paciente=${pacienteLogado.longitude}`);
+                const medicos = await resposta.json();
+
+                lista.innerHTML = '';
+                if (medicos.length === 0) {
+                    lista.innerHTML = '<p class="text-gray-500 italic">Nenhum médico registado no sistema.</p>';
+                    return;
+                }
+
+                medicos.forEach(m => {
+                    lista.innerHTML += `
+                        <div class="border border-gray-100 p-4 rounded-xl bg-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-md transition">
+                            <div>
+                                <span class="font-bold text-gray-800 text-lg block">${m.nome}</span>
+                                <span class="text-sm text-blue-600 font-semibold block">${m.especialidade} (CRM: ${m.crm})</span>
+                                <span class="text-xs text-gray-500 block mt-1">📍 Localização: ${m.morada}</span>
+                            </div>
+                            <div class="flex flex-col items-end gap-2 self-end md:self-auto w-full md:w-auto">
+                                <div class="text-right">
+                                    <span class="bg-yellow-100 text-yellow-800 font-bold px-3 py-1 rounded-full border border-yellow-300 text-xs block text-center">
+                                        ⭐ ${m.avaliacao_media || 'Sem avaliações'}
+                                    </span>
+                                    <span class="text-xs text-gray-500 block mt-1">A ${m.distancia_km} km de si</span>
+                                </div>
+                                <button onclick="abrirModalAgendar(${m.id}, '${m.nome}')" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition">
+                                    📅 Marcar Consulta
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+            } catch (error) {}
+        }
+
+        // LÓGICA DE AGENDAR CONSULTA
+        function abrirModalAgendar(medicoId, medicoNome) {
+            document.getElementById('ag-medico-id').value = medicoId;
+            document.getElementById('ag-nome-medico').textContent = medicoNome;
+            document.getElementById('ag-data').value = "";
+            document.getElementById('ag-horario').innerHTML = '<option value="">Selecione a data primeiro...</option>';
+            document.getElementById('ag-horario').disabled = true;
+            document.getElementById('modal-agendar').classList.remove('hidden');
+        }
+
+        function fecharModalAgendar() {
+            document.getElementById('modal-agendar').classList.add('hidden');
+            document.getElementById('form-marcar-consulta').reset();
+        }
+
+        document.getElementById('ag-data').addEventListener('change', async function() {
+            const medicoId = document.getElementById('ag-medico-id').value;
+            const data = this.value;
+            const sHorario = document.getElementById('ag-horario');
+
+            if (!data) return;
+            sHorario.innerHTML = '<option>A procurar horários...</option>';
+            sHorario.disabled = true;
+
+            try {
+                const res = await fetch(`${API_URL}/medicos/${medicoId}/horarios-disponiveis?data=${data}`);
+                const horarios = await res.json();
+                
+                if (horarios.length === 0) {
+                    sHorario.innerHTML = '<option value="">Sem horários disponíveis</option>';
+                    return;
+                }
+                
+                sHorario.innerHTML = '<option value="">Escolha um horário</option>' + horarios.map(h => `<option value="${h}">${h}</option>`).join('');
+                sHorario.disabled = false;
+            } catch (e) {
+                sHorario.innerHTML = '<option value="">Erro ao procurar</option>';
+            }
+        });
+
+        document.getElementById('form-marcar-consulta').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const dados = {
+                paciente_id: pacienteLogado.id,
+                medico_id: parseInt(document.getElementById('ag-medico-id').value),
+                data_hora: `${document.getElementById('ag-data').value}T${document.getElementById('ag-horario').value}:00`
+            };
+
+            try {
+                const res = await fetch(`${API_URL}/agendamentos/`, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify(dados) 
+                });
+                
+                if (res.ok) {
+                    alert("Consulta marcada com sucesso!");
+                    fecharModalAgendar();
+                    buscarMinhasConsultas();
+                } else {
+                    alert("Erro ao marcar consulta.");
+                }
+            } catch (error) {}
+        });
+
+        // BUSCAR AS MINHAS CONSULTAS E RENDERIZAR BOTÕES DINÂMICOS
+        async function buscarMinhasConsultas() {
+            if (!pacienteLogado) return;
+            const lista = document.getElementById('minhas-consultas');
+
+            try {
+                const [resAgendamentos, resMedicos] = await Promise.all([
+                    fetch(`${API_URL}/agendamentos/`),
+                    fetch(`${API_URL}/medicos/`)
+                ]);
+
+                const agendamentos = await resAgendamentos.json();
+                const medicos = await resMedicos.json();
+
+                const meusAgendamentos = agendamentos.filter(ag => ag.paciente_id === pacienteLogado.id);
+
+                lista.innerHTML = '';
+                if (meusAgendamentos.length === 0) {
+                    lista.innerHTML = '<li class="text-gray-500 italic text-sm">Nenhuma consulta agendada.</li>';
+                    return;
+                }
+
+                // Ordena por data
+                meusAgendamentos.sort((a, b) => new Date(b.data_hora) - new Date(a.data_hora));
+
+                meusAgendamentos.forEach(ag => {
+                    const medico = medicos.find(m => m.id === ag.medico_id);
+                    const dataFormatada = new Date(ag.data_hora).toLocaleString('pt-PT', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+                    
+                    // Lógica Dinâmica de Botões (Avaliar ou Cancelar)
+                    let botoesAcao = '';
+                    if (ag.status === 'Atendido') {
+                        botoesAcao = `<button onclick="abrirModalAvaliacao(${ag.id}, ${ag.medico_id})" class="mt-3 w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-950 font-bold py-1.5 rounded-lg text-xs transition shadow-sm">⭐ Avaliar Médico</button>`;
+                    } else if (ag.status === 'Confirmado') {
+                        botoesAcao = `<button onclick="cancelarConsulta(${ag.id})" class="mt-3 w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-1.5 rounded-lg text-xs transition border border-red-200">❌ Cancelar Consulta</button>`;
+                    }
+
+                    let badgeColor = ag.status === 'Confirmado' ? 'bg-blue-100 text-blue-800 border-blue-200' : ag.status === 'Atendido' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200';
+
+                    lista.innerHTML += `
+                        <li class="border border-gray-100 p-4 rounded-xl bg-gray-50 shadow-sm">
+                            <div class="font-bold text-gray-800">${medico ? medico.nome : 'Médico'}</div>
+                            <div class="text-xs text-gray-500">${medico ? medico.especialidade : ''}</div>
+                            <div class="text-sm text-gray-700 font-semibold mt-2">📅 ${dataFormatada}</div>
+                            <div class="flex justify-between items-center mt-3">
+                                <span class="inline-block px-2.5 py-0.5 rounded-full border text-xs font-bold ${badgeColor}">
+                                    ${ag.status}
+                                </span>
+                            </div>
+                            ${botoesAcao}
+                        </li>
+                    `;
+                });
+            } catch (error) {}
+        }
+
+        // ==========================================
+        // NOVA FUNÇÃO: CANCELAR CONSULTA
+        // ==========================================
+        async function cancelarConsulta(id) {
+            const confirmacao = confirm("Tem a certeza que deseja cancelar esta consulta? O horário voltará a ficar disponível para outros pacientes.");
+            if (!confirmacao) return;
+
+            try {
+                // Em vez de apagar do banco, mudamos o estado para "Cancelado" usando o nosso PATCH.
+                const resposta = await fetch(`${API_URL}/agendamentos/${id}/status?status_novo=Cancelado`, { 
+                    method: 'PATCH' 
+                });
+                
+                if (resposta.ok) {
+                    buscarMinhasConsultas(); // Recarrega a lista para mostrar a etiqueta vermelha
+                } else {
+                    alert("Erro ao tentar cancelar a consulta no servidor.");
+                }
+            } catch (error) {
+                alert("Erro grave de ligação.");
+            }
+        }
+
+        // AGENDAR EXAME E BUSCAR EXAMES
+        document.getElementById('form-exame').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            if (!pacienteLogado) return;
+            const dadosExame = {
+                paciente_id: pacienteLogado.id, tipo_exame: document.getElementById('ex-tipo').value,
+                laboratorio: document.getElementById('ex-lab').value, data_hora: document.getElementById('ex-data').value
+            };
+            try {
+                const resposta = await fetch(`${API_URL}/exames/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dadosExame) });
+                if (resposta.ok) { alert("Exame agendado!"); this.reset(); buscarMeusExames(); } else { alert("Erro ao agendar."); }
+            } catch (error) {}
+        });
+
+        async function buscarMeusExames() {
+            if (!pacienteLogado) return;
+            const lista = document.getElementById('meus-exames');
+            try {
+                const resposta = await fetch(`${API_URL}/exames/`);
+                const exames = await resposta.json();
+                const meusExames = exames.filter(ex => ex.paciente_id === pacienteLogado.id);
+                lista.innerHTML = '';
+                if (meusExames.length === 0) { lista.innerHTML = '<li class="text-gray-500 italic text-sm">Nenhum exame agendado.</li>'; return; }
+                meusExames.forEach(ex => {
+                    const dataFormatada = new Date(ex.data_hora).toLocaleString('pt-PT', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+                    lista.innerHTML += `
+                        <li class="border border-purple-100 p-4 rounded-xl bg-purple-50 shadow-sm">
+                            <div class="font-bold text-purple-900">${ex.tipo_exame}</div>
+                            <div class="text-xs text-purple-700">🧪 Lab: ${ex.laboratorio}</div>
+                            <div class="text-sm text-gray-700 font-semibold mt-2">📅 ${dataFormatada}</div>
+                            <span class="inline-block px-2.5 py-0.5 rounded-full bg-purple-200 text-purple-800 border border-purple-300 text-xs font-bold mt-2">${ex.status}</span>
+                        </li>
+                    `;
+                });
+            } catch (error) {}
+        }
+
+        // LÓGICA DO MODAL DE AVALIAÇÃO
+        function abrirModalAvaliacao(agendamentoId, medicoId) {
+            document.getElementById('av-agendamento-id').value = agendamentoId;
+            document.getElementById('av-medico-id').value = medicoId;
+            document.getElementById('modal-avaliacao').classList.remove('hidden');
+        }
+
+        function fecharModalAvaliacao() {
+            document.getElementById('modal-avaliacao').classList.add('hidden');
+            document.getElementById('form-avaliacao').reset();
+        }
+
+        document.getElementById('form-avaliacao').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const dados = {
+                agendamento_id: parseInt(document.getElementById('av-agendamento-id').value), paciente_id: pacienteLogado.id,
+                medico_id: parseInt(document.getElementById('av-medico-id').value), nota_medico: parseInt(document.getElementById('av-nota').value),
+                comentario_paciente: document.getElementById('av-comentario').value, nota_paciente: 5, comentario_medico: "Avaliado pelo paciente."
+            };
+            try {
+                const res = await fetch(`${API_URL}/avaliacoes/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
+                if (res.ok) { alert("Avaliação enviada!"); fecharModalAvaliacao(); buscarMinhasConsultas(); buscarMedicosRecomendados(); } else { const err = await res.json(); alert("Atenção: " + err.detail); }
+            } catch (error) {}
+        });
+
+        function terminarSessao() {
+            localStorage.clear();
+            window.location.href = "login.html";
+        }
+
+        window.onload = () => { verificarAcesso(); carregarPerfil(); };
+    </script>
+</body>
+</html>

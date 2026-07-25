@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clínica - Sistema de Gestão</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-8 font-sans text-gray-800">
+
+    <div class="max-w-6xl mx-auto space-y-6">
+        
+        <div class="flex items-center justify-between border-b border-gray-300 pb-4">
+            <h1 class="text-3xl font-bold text-blue-800">Clínica Saúde</h1>
+            <span class="text-sm font-semibold bg-blue-100 text-blue-800 py-1 px-3 rounded-full">Painel Administrativo</span>
+        </div>
+
+        <div class="flex border-b border-gray-300 overflow-x-auto">
+            <button onclick="mudarAba('aba-agenda')" id="btn-agenda" class="tab-btn py-3 px-6 border-b-2 font-bold border-blue-600 text-blue-600 hover:bg-gray-100 transition whitespace-nowrap">
+                📅 Agenda e Consultas
+            </button>
+            <button onclick="mudarAba('aba-pacientes')" id="btn-pacientes" class="tab-btn py-3 px-6 border-b-2 font-bold border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition whitespace-nowrap">
+                👤 Cadastro de Pacientes
+            </button>
+            <button onclick="mudarAba('aba-medicos')" id="btn-medicos" class="tab-btn py-3 px-6 border-b-2 font-bold border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition whitespace-nowrap">
+                🩺 Equipe Médica
+            </button>
+        </div>
+
+        <div id="aba-agenda" class="tab-content block space-y-6 animate-[fadeIn_0.3s_ease-in-out]">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h2 class="text-lg font-bold mb-4 text-green-700">Agendar Nova Consulta</h2>
+                <form id="form-agendamento" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Paciente</label>
+                        <select id="select-paciente" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50"></select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Médico</label>
+                        <select id="select-medico" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50"></select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Data</label>
+                        <input type="date" id="data-consulta" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Horário</label>
+                        <select id="select-horario" required disabled class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 disabled:bg-gray-200"></select>
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-green-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-green-700 transition">Confirmar</button>
+                    </div>
+                </form>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h2 class="text-lg font-bold mb-4 text-purple-700">Consultas Agendadas</h2>
+                <ul id="lista-agendamentos" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></ul>
+            </div>
+        </div>
+
+        <div id="aba-pacientes" class="tab-content hidden animate-[fadeIn_0.3s_ease-in-out]">
+            <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-100 max-w-4xl mx-auto">
+                <h2 class="text-xl font-bold mb-6 text-gray-800">Ficha Completa do Paciente</h2>
+                <form id="form-paciente" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700">Nome Completo</label>
+                            <input type="text" id="pac-nome" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Data de Nascimento</label>
+                            <input type="date" id="pac-nascimento" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">CPF</label>
+                            <input type="text" id="pac-cpf" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Telefone</label>
+                            <input type="text" id="pac-telefone" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">E-mail</label>
+                            <input type="email" id="pac-email" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                    </div>
+
+                    <h3 class="text-md font-bold text-gray-600 border-b pb-2 mt-6">Endereço Residencial</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">CEP</label>
+                            <input type="text" id="pac-cep" required onblur="buscarCep(this.value, 'pac')" placeholder="Ex: 60000-000" class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700">Rua / Logradouro</label>
+                            <input type="text" id="pac-rua" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Número</label>
+                            <input type="text" id="pac-numero" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm font-medium text-gray-700">Bairro</label>
+                            <input type="text" id="pac-bairro" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Cidade</label>
+                            <input type="text" id="pac-cidade" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Estado (UF)</label>
+                            <input type="text" id="pac-estado" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition">Salvar Paciente no Sistema</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="aba-medicos" class="tab-content hidden animate-[fadeIn_0.3s_ease-in-out]">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold mb-4 text-gray-800">Cadastrar Profissional</h2>
+                    <form id="form-medico" class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-gray-700">Nome</label>
+                                <input type="text" id="med-nome" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Especialidade</label>
+                                <input type="text" id="med-especialidade" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">CRM</label>
+                                <input type="text" id="med-crm" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Tempo Consulta (min)</label>
+                                <input type="number" id="med-duracao" required value="30" class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">E-mail Corporativo</label>
+                                <input type="email" id="med-email" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                            </div>
+                        </div>
+
+                        <h3 class="text-sm font-bold text-gray-600 border-b pb-1 mt-4">Endereço do Consultório</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">CEP</label>
+                                <input type="text" id="med-cep" required onblur="buscarCep(this.value, 'med')" class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Rua</label>
+                                <input type="text" id="med-rua" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Número</label>
+                                <input type="text" id="med-numero" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Bairro</label>
+                                <input type="text" id="med-bairro" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Cidade</label>
+                                <input type="text" id="med-cidade" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">Estado (UF)</label>
+                                <input type="text" id="med-estado" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-gray-50">
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 mt-4">Salvar Médico</button>
+                    </form>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold mb-4 text-gray-800">Equipe Atual</h2>
+                    <ul id="lista-medicos" class="space-y-4"></ul>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="modal-avaliacao" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md animate-[fadeIn_0.2s_ease-in-out]">
+            <h2 class="text-2xl font-bold mb-4 text-gray-800 border-b pb-2">Avaliar Consulta</h2>
+            
+            <form id="form-avaliacao" class="space-y-4">
+                <input type="hidden" id="av-agendamento-id">
+                <input type="hidden" id="av-paciente-id">
+                <input type="hidden" id="av-medico-id">
+
+                <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                    <label class="block text-sm font-bold text-blue-800">1. Nota para o Médico</label>
+                    <select id="av-nota-medico" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-white">
+                        <option value="5">⭐⭐⭐⭐⭐ (5) Excelente</option>
+                        <option value="4">⭐⭐⭐⭐ (4) Muito Bom</option>
+                        <option value="3">⭐⭐⭐ (3) Bom</option>
+                        <option value="2">⭐⭐ (2) Regular</option>
+                        <option value="1">⭐ (1) Mau</option>
+                    </select>
+                    <label class="block text-sm font-medium text-gray-700 mt-2">Comentário do Paciente</label>
+                    <textarea id="av-comentario-paciente" rows="2" placeholder="O que achou do atendimento?" class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-white"></textarea>
+                </div>
+
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="block text-sm font-bold text-gray-700">2. Nota para o Paciente (Uso Interno)</label>
+                    <select id="av-nota-paciente" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-white">
+                        <option value="5">⭐⭐⭐⭐⭐ (5) Excelente</option>
+                        <option value="4">⭐⭐⭐⭐ (4) Muito Bom</option>
+                        <option value="3">⭐⭐⭐ (3) Bom</option>
+                        <option value="2">⭐⭐ (2) Regular</option>
+                        <option value="1">⭐ (1) Mau</option>
+                    </select>
+                    <label class="block text-sm font-medium text-gray-700 mt-2">Observações Médicas</label>
+                    <textarea id="av-comentario-medico" rows="2" placeholder="Paciente foi pontual?" class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-white"></textarea>
+                </div>
+
+                <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
+                    <button type="button" onclick="fecharModal()" class="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-yellow-500 text-yellow-900 font-bold rounded-lg hover:bg-yellow-600 transition shadow-sm">Salvar Feedback</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+
+        // ABAS
+        function mudarAba(abaId) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden', 'block') && c.classList.remove('block'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.replace('border-blue-600', 'border-transparent') || b.classList.replace('text-blue-600', 'text-gray-500'));
+            
+            document.getElementById(abaId).classList.replace('hidden', 'block');
+            const idBotao = 'btn-' + abaId.split('-')[1];
+            document.getElementById(idBotao).classList.replace('border-transparent', 'border-blue-600');
+            document.getElementById(idBotao).classList.replace('text-gray-500', 'text-blue-600');
+        }
+
+        // INTEGRAÇÃO VIACEP
+        async function buscarCep(cep, prefixo) {
+            const cepLimpo = cep.replace(/\D/g, '');
+            if (cepLimpo.length !== 8) return;
+            try {
+                const resposta = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+                const dados = await resposta.json();
+                if (!dados.erro) {
+                    document.getElementById(`${prefixo}-rua`).value = dados.logradouro;
+                    document.getElementById(`${prefixo}-bairro`).value = dados.bairro;
+                    document.getElementById(`${prefixo}-cidade`).value = dados.localidade;
+                    document.getElementById(`${prefixo}-estado`).value = dados.uf;
+                    document.getElementById(`${prefixo}-numero`).focus();
+                }
+            } catch (error) {}
+        }
+
+        // CADASTROS
+        document.getElementById('form-paciente').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const dados = {
+                nome: document.getElementById('pac-nome').value, cpf: document.getElementById('pac-cpf').value, telefone: document.getElementById('pac-telefone').value,
+                email: document.getElementById('pac-email').value, data_nascimento: document.getElementById('pac-nascimento').value,
+                endereco_rua: document.getElementById('pac-rua').value, endereco_numero: document.getElementById('pac-numero').value,
+                endereco_bairro: document.getElementById('pac-bairro').value, endereco_cidade: document.getElementById('pac-cidade').value,
+                endereco_estado: document.getElementById('pac-estado').value, endereco_cep: document.getElementById('pac-cep').value
+            };
+            try {
+                const res = await fetch(`${API_URL}/pacientes/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
+                if (res.ok) { alert("Paciente cadastrado!"); this.reset(); carregarOpcoesAgendamento(); } else { const err = await res.json(); alert("Erro: " + err.detail); }
+            } catch (error) { alert("Erro de conexão."); }
+        });
+
+        document.getElementById('form-medico').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const dados = {
+                nome: document.getElementById('med-nome').value, especialidade: document.getElementById('med-especialidade').value, crm: document.getElementById('med-crm').value,
+                duracao_consulta: parseInt(document.getElementById('med-duracao').value), email: document.getElementById('med-email').value,
+                endereco_rua: document.getElementById('med-rua').value, endereco_numero: document.getElementById('med-numero').value,
+                endereco_bairro: document.getElementById('med-bairro').value, endereco_cidade: document.getElementById('med-cidade').value,
+                endereco_estado: document.getElementById('med-estado').value, endereco_cep: document.getElementById('med-cep').value
+            };
+            try {
+                const res = await fetch(`${API_URL}/medicos/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
+                if (res.ok) { alert("Médico cadastrado!"); this.reset(); buscarMedicos(); carregarOpcoesAgendamento(); } else { const err = await res.json(); alert("Erro: " + err.detail); }
+            } catch (error) { alert("Erro de conexão."); }
+        });
+
+        // LISTAR MÉDICOS
+        async function buscarMedicos() {
+            const lista = document.getElementById('lista-medicos');
+            try {
+                const res = await fetch(`${API_URL}/medicos/`);
+                const medicos = await res.json();
+                lista.innerHTML = '';
+                medicos.forEach(m => {
+                    lista.innerHTML += `
+                        <li class="border border-gray-200 p-3 rounded-lg flex justify-between items-center bg-gray-50 shadow-sm">
+                            <div>
+                                <span class="font-bold text-gray-800 block text-md">${m.nome}</span>
+                                <span class="text-xs text-gray-500">CRM: ${m.crm}</span>
+                            </div>
+                            <span class="bg-yellow-100 text-yellow-800 text-sm font-bold px-3 py-1 rounded-full border border-yellow-300">
+                                ⭐ ${m.avaliacao_media}
+                            </span>
+                        </li>
+                    `;
+                });
+            } catch (e) {}
+        }
+
+        // AGENDAMENTOS
+        async function carregarOpcoesAgendamento() {
+            try {
+                const [resP, resM] = await Promise.all([fetch(`${API_URL}/pacientes/`), fetch(`${API_URL}/medicos/`)]);
+                const pacientes = await resP.json(); const medicos = await resM.json();
+                const sPac = document.getElementById('select-paciente'); const sMed = document.getElementById('select-medico');
+                sPac.innerHTML = '<option value="">Selecione...</option>' + pacientes.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+                sMed.innerHTML = '<option value="">Selecione...</option>' + medicos.map(m => `<option value="${m.id}">${m.nome}</option>`).join('');
+            } catch (e) {}
+        }
+
+        async function carregarHorarios() {
+            const medId = document.getElementById('select-medico').value; const data = document.getElementById('data-consulta').value;
+            const sHorario = document.getElementById('select-horario');
+            if (!medId || !data) { sHorario.disabled = true; return; }
+            try {
+                const res = await fetch(`${API_URL}/medicos/${medId}/horarios-disponiveis?data=${data}`);
+                const horarios = await res.json();
+                sHorario.innerHTML = '<option value="">Escolha um horário</option>' + horarios.map(h => `<option value="${h}">${h}</option>`).join('');
+                sHorario.disabled = false;
+            } catch (e) {}
+        }
+        document.getElementById('select-medico').addEventListener('change', carregarHorarios);
+        document.getElementById('data-consulta').addEventListener('change', carregarHorarios);
+
+        document.getElementById('form-agendamento').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const dados = { paciente_id: parseInt(document.getElementById('select-paciente').value), medico_id: parseInt(document.getElementById('select-medico').value), data_hora: `${document.getElementById('data-consulta').value}T${document.getElementById('select-horario').value}:00` };
+            try {
+                const res = await fetch(`${API_URL}/agendamentos/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
+                if (res.ok) { alert("Consulta Marcada!"); this.reset(); buscarAgendamentos(); } else { alert("Erro ao agendar."); }
+            } catch (error) {}
+        });
+
+        // EXIBIR AGENDA E BOTÃO DE AVALIAÇÃO
+        async function buscarAgendamentos() {
+            const lista = document.getElementById('lista-agendamentos');
+            try {
+                const [resA, resP, resM] = await Promise.all([fetch(`${API_URL}/agendamentos/`), fetch(`${API_URL}/pacientes/`), fetch(`${API_URL}/medicos/`)]);
+                const agendamentos = await resA.json(); const pacientes = await resP.json(); const medicos = await resM.json();
+
+                lista.innerHTML = '';
+                agendamentos.forEach(ag => {
+                    const p = pacientes.find(x => x.id === ag.paciente_id);
+                    const m = medicos.find(x => x.id === ag.medico_id);
+                    const dataFormatada = new Date(ag.data_hora).toLocaleString('pt-BR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+                    
+                    // Lógica para exibir o botão apenas se a consulta foi "Atendida"
+                    let btnAvaliar = '';
+                    if (ag.status === 'Atendido') {
+                        btnAvaliar = `<button onclick="abrirModal(${ag.id}, ${ag.paciente_id}, ${ag.medico_id})" class="mt-3 w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold py-2 px-2 rounded-lg text-sm transition shadow-sm">⭐ Avaliar Consulta</button>`;
+                    }
+                    
+                    lista.innerHTML += `
+                        <li class="border border-gray-200 p-4 rounded-xl bg-white shadow-sm relative">
+                            <div class="font-bold text-gray-800 text-lg">${p.nome}</div>
+                            <div class="text-blue-600 font-medium text-sm mb-2">👨‍⚕️ ${m.nome}</div>
+                            <div class="text-gray-700 text-sm mb-2">📅 ${dataFormatada}</div>
+                            <select onchange="atualizarStatus(${ag.id}, this.value)" class="text-xs font-bold px-2 py-2 rounded-lg border border-gray-300 w-full mb-1 bg-gray-50 focus:ring-blue-500">
+                                <option value="Confirmado" ${ag.status === 'Confirmado' ? 'selected' : ''}>⏳ Confirmado</option>
+                                <option value="Atendido" ${ag.status === 'Atendido' ? 'selected' : ''}>✅ Atendido</option>
+                                <option value="Cancelado" ${ag.status === 'Cancelado' ? 'selected' : ''}>❌ Cancelado</option>
+                            </select>
+                            ${btnAvaliar}
+                        </li>
+                    `;
+                });
+            } catch (e) {}
+        }
+
+        async function atualizarStatus(id, status) {
+            try {
+                await fetch(`${API_URL}/agendamentos/${id}/status?status_novo=${status}`, { method: 'PATCH' });
+                buscarAgendamentos(); // Recarrega para mostrar ou esconder o botão de avaliar
+            } catch (error) { alert("Erro ao atualizar status."); }
+        }
+
+        // ==========================================
+        // LÓGICA DO MODAL DE AVALIAÇÃO
+        // ==========================================
+        function abrirModal(agendamentoId, pacienteId, medicoId) {
+            document.getElementById('av-agendamento-id').value = agendamentoId;
+            document.getElementById('av-paciente-id').value = pacienteId;
+            document.getElementById('av-medico-id').value = medicoId;
+            document.getElementById('modal-avaliacao').classList.remove('hidden');
+        }
+
+        function fecharModal() {
+            document.getElementById('modal-avaliacao').classList.add('hidden');
+            document.getElementById('form-avaliacao').reset();
+        }
+
+        document.getElementById('form-avaliacao').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const dados = {
+                agendamento_id: parseInt(document.getElementById('av-agendamento-id').value),
+                paciente_id: parseInt(document.getElementById('av-paciente-id').value),
+                medico_id: parseInt(document.getElementById('av-medico-id').value),
+                nota_medico: parseInt(document.getElementById('av-nota-medico').value),
+                comentario_paciente: document.getElementById('av-comentario-paciente').value,
+                nota_paciente: parseInt(document.getElementById('av-nota-paciente').value),
+                comentario_medico: document.getElementById('av-comentario-medico').value
+            };
+
+            try {
+                const res = await fetch(`${API_URL}/avaliacoes/`, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify(dados) 
+                });
+                
+                if (res.ok) {
+                    alert("Feedback salvo com sucesso!");
+                    fecharModal();
+                    buscarMedicos(); // Atualiza instantaneamente a média de estrelas na aba Equipe Médica
+                } else {
+                    const err = await res.json();
+                    alert("Atenção: " + err.detail);
+                }
+            } catch (error) { 
+                alert("Erro grave de conexão."); 
+            }
+        });
+
+        // INIT
+        window.onload = () => {
+            mudarAba('aba-agenda');
+            buscarMedicos();
+            carregarOpcoesAgendamento();
+            buscarAgendamentos();
+        };
+    </script>
+</body>
+</html>
