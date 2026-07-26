@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clínica - Sistema de Gestão</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="app.css">
 </head>
-<body class="bg-gray-50 p-8 font-sans text-gray-800">
+<body class="app-shell bg-gray-50 p-8 font-sans text-gray-800" data-role="admin">
 
     <div class="max-w-6xl mx-auto space-y-6">
         
-        <div class="flex items-center justify-between border-b border-gray-300 pb-4">
+        <div class="app-topbar flex items-center justify-between border border-gray-200 rounded-2xl px-6 py-4">
             <h1 class="text-3xl font-bold text-blue-800">Clínica Saúde</h1>
             <span class="text-sm font-semibold bg-blue-100 text-blue-800 py-1 px-3 rounded-full">Painel Administrativo</span>
         </div>
@@ -229,6 +230,15 @@
 
     <script>
         const API_URL = "http://127.0.0.1:8000";
+        const fetchOriginal = window.fetch.bind(window);
+        window.fetch = (input, init = {}) => {
+            const url = typeof input === 'string' ? input : input.url;
+            if (!url.startsWith(API_URL)) return fetchOriginal(input, init);
+            const headers = new Headers(init.headers || {});
+            const token = localStorage.getItem('token');
+            if (token) headers.set('Authorization', `Bearer ${token}`);
+            return fetchOriginal(input, { ...init, headers });
+        };
 
         // ABAS
         function mudarAba(abaId) {
@@ -445,5 +455,6 @@
             buscarAgendamentos();
         };
     </script>
+    <script src="app.js"></script>
 </body>
 </html>

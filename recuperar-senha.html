@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recuperar senha | Clínica Saúde</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body class="app-shell min-h-screen flex items-center justify-center font-sans p-5">
+    <main class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100">
+        <div class="text-center mb-8">
+            <span class="brand-mark mx-auto mb-4" aria-hidden="true">+</span>
+            <p class="page-kicker">Acesso seguro</p>
+            <h1 id="titulo" class="text-2xl font-extrabold text-blue-950 mt-2">Recuperar senha</h1>
+            <p id="descricao" class="text-gray-500 text-sm mt-2">Informe seu e-mail. Enviaremos um link seguro para redefinir sua senha.</p>
+        </div>
+
+        <form id="form-solicitar" class="space-y-5">
+            <div>
+                <label for="email" class="block text-sm font-semibold text-gray-700">E-mail cadastrado</label>
+                <input type="email" id="email" autocomplete="email" required placeholder="voce@exemplo.com" class="mt-1 block w-full border rounded-lg p-3">
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg">Enviar link de recuperação</button>
+        </form>
+
+        <form id="form-redefinir" class="space-y-5 hidden">
+            <input type="hidden" id="token">
+            <div>
+                <label for="nova-senha" class="block text-sm font-semibold text-gray-700">Nova senha</label>
+                <input type="password" id="nova-senha" autocomplete="new-password" minlength="8" required class="mt-1 block w-full border rounded-lg p-3">
+                <p class="text-xs text-gray-500 mt-2">Use pelo menos 8 caracteres.</p>
+            </div>
+            <div>
+                <label for="confirmar-senha" class="block text-sm font-semibold text-gray-700">Confirmar nova senha</label>
+                <input type="password" id="confirmar-senha" autocomplete="new-password" minlength="8" required class="mt-1 block w-full border rounded-lg p-3">
+            </div>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg">Salvar nova senha</button>
+        </form>
+
+        <p id="mensagem" class="hidden mt-5 text-sm text-center" role="status"></p>
+        <p class="mt-7 text-center"><a href="login.html" class="text-sm font-semibold text-blue-700 hover:underline">Voltar para o login</a></p>
+    </main>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+        const parametros = new URLSearchParams(window.location.search);
+        const token = parametros.get('token');
+        const mensagem = document.getElementById('mensagem');
+        const exibirMensagem = (texto, erro = false) => {
+            mensagem.textContent = texto;
+            mensagem.className = `mt-5 text-sm text-center font-semibold ${erro ? 'text-red-600' : 'text-green-700'}`;
+        };
+
+        if (token) {
+            document.getElementById('form-solicitar').classList.add('hidden');
+            document.getElementById('form-redefinir').classList.remove('hidden');
+            document.getElementById('token').value = token;
+            document.getElementById('titulo').textContent = 'Criar nova senha';
+            document.getElementById('descricao').textContent = 'Defina uma senha forte para acessar sua conta novamente.';
+        }
+
+        document.getElementById('form-solicitar').addEventListener('submit', async event => {
+            event.preventDefault();
+            const response = await fetch(`${API_URL}/auth/solicitar-recuperacao`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email: document.getElementById('email').value})
+            });
+            const dados = await response.json();
+            exibirMensagem(dados.mensagem || 'Confira sua caixa de entrada.', !response.ok);
+        });
+
+        document.getElementById('form-redefinir').addEventListener('submit', async event => {
+            event.preventDefault();
+            const senha = document.getElementById('nova-senha').value;
+            if (senha !== document.getElementById('confirmar-senha').value) {
+                exibirMensagem('As senhas não coincidem.', true); return;
+            }
+            const response = await fetch(`${API_URL}/auth/redefinir-senha`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({token, nova_senha: senha})
+            });
+            const dados = await response.json();
+            exibirMensagem(dados.mensagem || 'Não foi possível atualizar a senha.', !response.ok);
+            if (response.ok) setTimeout(() => window.location.href = 'login.html', 1800);
+        });
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>

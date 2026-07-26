@@ -9,6 +9,7 @@ class Usuario(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     senha_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)  # "admin", "medico", "paciente"
+    reset_version = Column(Integer, nullable=False, default=0)
 
     # Relacionamentos de via única (1 para 1)
     paciente = relationship("Paciente", back_populates="usuario", uselist=False)
@@ -98,6 +99,7 @@ class Exame(Base):
     data_hora = Column(DateTime, nullable=False)
     laboratorio = Column(String, nullable=False)
     status = Column(String, default="Pendente")
+    resultado = Column(String, nullable=True)
 
     paciente = relationship("Paciente", back_populates="exames")
 

@@ -1,55 +1,52 @@
 import math
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+import smtplib
 from datetime import datetime, timedelta
-from typing import List
+from email.message import EmailMessage
+from typing import Callable, List
+from urllib.parse import urlencode
+
+import jwt
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jwt import InvalidTokenError
+from passlib.context import CryptContext
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 import models
 import schemas
+from config import (ACCESS_TOKEN_EXPIRE_MINUTES, ALLOWED_ORIGINS, APP_ENV,
+                    RESET_TOKEN_EXPIRE_MINUTES, RESET_URL, SECRET_KEY, SMTP_FROM,
+                    SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_USERNAME)
 from database import SessionLocal, engine
 
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from passlib.context import CryptContext
-import jwt
-
-# Configurações do JWT (Chave secreta para assinar as pulseiras virtuais)
-SECRET_KEY = "sua_chave_secreta_super_segura_aqui"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 120
-
-# Criptografia de senhas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# Funções auxiliares de segurança
-def obter_senha_criptografada(senha: str) -> str:
-    return pwd_context.hash(senha)
-
-def verificar_senha(senha_pura: str, senha_criptografada: str) -> bool:
-    return pwd_context.verify(senha_pura, senha_criptografada)
-
-def criar_token_acesso(dados: dict) -> str:
-    dados_copia = dados.copy()
-    expiracao = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    dados_copia.update({"exp": expiracao})
-    return jwt.encode(dados_copia, SECRET_KEY, algorithm=ALGORITHM)
-
-# Cria as tabelas na base de dados automaticamente se não existirem
-models.Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="Clínica Inteligente - API")
-
-# Configuração de CORS para permitir acesso do Live Server (Portas 5500, etc.)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
-# Dependência para obter a sessão da base de dados
+
+@app.on_event("startup")
+def criar_estrutura_banco() -> None:
+    """Cria tabelas novas em desenvolvimento; em produção use Alembic."""
+    if APP_ENV == "development":
+        models.Base.metadata.create_all(bind=engine)
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE exames ADD COLUMN IF NOT EXISTS resultado VARCHAR"))
+            connection.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS reset_version INTEGER NOT NULL DEFAULT 0"))
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -57,291 +54,293 @@ def get_db():
     finally:
         db.close()
 
-# --- FUNÇÃO AUXILIAR: FÓRMULA DE HAVERSINE ---
+
+def senha_hash(senha: str) -> str:
+    return pwd_context.hash(senha)
+
+
+def verificar_senha(senha_pura: str, senha_criptografada: str) -> bool:
+    return pwd_context.verify(senha_pura, senha_criptografada)
+
+
+def criar_token_acesso(dados: dict) -> str:
+    payload = dados.copy()
+    payload["exp"] = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def criar_token_recuperacao(usuario: models.Usuario) -> str:
+    return jwt.encode(
+        {"sub": usuario.email, "purpose": "password_reset", "rv": usuario.reset_version, "exp": datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)},
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def enviar_link_recuperacao(destinatario: str, token: str) -> None:
+    link = f"{RESET_URL}?{urlencode({'token': token})}"
+    if APP_ENV == "development":
+        print(f"[RECUPERACAO DE SENHA] Link para {destinatario}: {link}")
+        return
+    if not SMTP_HOST:
+        raise RuntimeError("SMTP_HOST deve ser configurado em produção para recuperar senhas.")
+    mensagem = EmailMessage()
+    mensagem["Subject"] = "Redefinição de senha - Clínica Saúde"
+    mensagem["From"] = SMTP_FROM
+    mensagem["To"] = destinatario
+    mensagem.set_content(f"Use este link para criar uma nova senha. Ele expira em {RESET_TOKEN_EXPIRE_MINUTES} minutos: {link}")
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as servidor:
+        servidor.starttls()
+        if SMTP_USERNAME and SMTP_PASSWORD:
+            servidor.login(SMTP_USERNAME, SMTP_PASSWORD)
+        servidor.send_message(mensagem)
+
+
+def usuario_atual(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+) -> models.Usuario:
+    credencial_invalida = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Não foi possível validar as credenciais.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        email = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sub")
+    except InvalidTokenError:
+        raise credencial_invalida
+    if not email:
+        raise credencial_invalida
+    usuario = db.query(models.Usuario).filter(models.Usuario.email == email).first()
+    if not usuario:
+        raise credencial_invalida
+    return usuario
+
+
+def exigir_roles(*roles: str) -> Callable:
+    def verificar(usuario: models.Usuario = Depends(usuario_atual)) -> models.Usuario:
+        if usuario.role not in roles:
+            raise HTTPException(status_code=403, detail="Você não tem permissão para esta ação.")
+        return usuario
+
+    return verificar
+
+
+def paciente_do_usuario(usuario: models.Usuario, db: Session) -> models.Paciente:
+    paciente = db.query(models.Paciente).filter(models.Paciente.usuario_id == usuario.id).first()
+    if not paciente:
+        raise HTTPException(status_code=403, detail="Seu usuário não está vinculado a um paciente.")
+    return paciente
+
+
+def medico_do_usuario(usuario: models.Usuario, db: Session) -> models.Medico:
+    medico = db.query(models.Medico).filter(models.Medico.usuario_id == usuario.id).first()
+    if not medico:
+        raise HTTPException(status_code=403, detail="Seu usuário não está vinculado a um médico.")
+    return medico
+
+
 def calcular_distancia(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calcula a distância em quilómetros entre duas coordenadas geográficas."""
     if None in (lat1, lon1, lat2, lon2):
-        return 9999.0 # Distância padrão elevada caso falte alguma coordenada
-    
-    R = 6371.0  # Raio da Terra em km
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2 + 
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2)
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
+        return 9999.0
+    raio_terra = 6371.0
+    dlat, dlon = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return raio_terra * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-# ==========================================
-# ROTAS DE PACIENTES
-# ==========================================
+@app.get("/", include_in_schema=False)
+def inicio():
+    return HTMLResponse('<h1>Clínica Inteligente</h1><p>API disponível em <a href="/docs">/docs</a>.</p>')
 
-@app.post("/pacientes/", response_model=schemas.PacienteResponse)
-def criar_paciente(paciente: schemas.PacienteCreate, db: Session = Depends(get_db)):
-    # Valida CPF único
-    db_paciente = db.query(models.Paciente).filter(models.Paciente.cpf == paciente.cpf).first()
-    if db_paciente:
-        raise HTTPException(status_code=400, detail="CPF já cadastrado no sistema.")
-    
-    # Valida Email único
-    db_email = db.query(models.Paciente).filter(models.Paciente.email == paciente.email).first()
-    if db_email:
-        raise HTTPException(status_code=400, detail="E-mail já registado no sistema.")
 
-    novo_paciente = models.Paciente(**paciente.dict())
-    db.add(novo_paciente)
-    db.commit()
-    db.refresh(novo_paciente)
-    return novo_paciente
+@app.post("/pacientes/", response_model=schemas.PacienteResponse, status_code=status.HTTP_201_CREATED)
+def criar_paciente(paciente: schemas.PacienteCreate, db: Session = Depends(get_db), _: models.Usuario = Depends(exigir_roles("admin"))):
+    if db.query(models.Paciente).filter((models.Paciente.cpf == paciente.cpf) | (models.Paciente.email == paciente.email)).first():
+        raise HTTPException(status_code=400, detail="CPF ou e-mail já cadastrado.")
+    novo = models.Paciente(**paciente.model_dump())
+    db.add(novo); db.commit(); db.refresh(novo)
+    return novo
+
 
 @app.get("/pacientes/", response_model=List[schemas.PacienteResponse])
-def listar_pacientes(db: Session = Depends(get_db)):
+def listar_pacientes(db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "medico", "paciente"))):
+    if usuario.role == "paciente":
+        return [paciente_do_usuario(usuario, db)]
     return db.query(models.Paciente).all()
 
 
-# ==========================================
-# ROTAS DE MÉDICOS
-# ==========================================
+@app.post("/medicos/", response_model=schemas.MedicoResponse, status_code=status.HTTP_201_CREATED)
+def criar_medico(medico: schemas.MedicoCreate, db: Session = Depends(get_db), _: models.Usuario = Depends(exigir_roles("admin"))):
+    if db.query(models.Medico).filter((models.Medico.crm == medico.crm) | (models.Medico.email == medico.email)).first():
+        raise HTTPException(status_code=400, detail="CRM ou e-mail já cadastrado.")
+    novo = models.Medico(**medico.model_dump())
+    db.add(novo); db.commit(); db.refresh(novo)
+    return novo
 
-@app.post("/medicos/", response_model=schemas.MedicoResponse)
-def criar_medico(medico: schemas.MedicoCreate, db: Session = Depends(get_db)):
-    db_crm = db.query(models.Medico).filter(models.Medico.crm == medico.crm).first()
-    if db_crm:
-        raise HTTPException(status_code=400, detail="CRM já registado.")
-
-    novo_medico = models.Medico(**medico.dict())
-    db.add(novo_medico)
-    db.commit()
-    db.refresh(novo_medico)
-    return novo_medico
 
 @app.get("/medicos/", response_model=List[schemas.MedicoResponse])
-def listar_medicos(db: Session = Depends(get_db)):
+def listar_medicos(db: Session = Depends(get_db), _: models.Usuario = Depends(exigir_roles("admin", "medico", "paciente"))):
     return db.query(models.Medico).all()
 
-# NOVA ROTA: Recomendar médicos por Proximidade e Avaliação
-@app.get("/medicos/recomendados")
-def recomendar_medicos(latitude_paciente: float, longitude_paciente: float, db: Session = Depends(get_db)):
-    medicos = db.query(models.Medico).all()
-    
-    lista_recomendada = []
-    for m in medicos:
-        distancia = calcular_distancia(latitude_paciente, longitude_paciente, m.latitude, m.longitude)
-        lista_recomendada.append((m, distancia))
-    
-    # Ordena: 1º por melhor avaliação (decrescente), 2º por menor distância (crescente)
-    lista_recomendada.sort(key=lambda x: (-x[0].avaliacao_media, x[1]))
-    
-    resultado = []
-    for m, dist in lista_recomendada:
-        resultado.append({
-            "id": m.id,
-            "nome": m.nome,
-            "especialidade": m.especialidade,
-            "crm": m.crm,
-            "avaliacao_media": m.avaliacao_media,
-            "distancia_km": round(dist, 2),
-            "morada": f"{m.endereco_rua}, {m.endereco_numero} - {m.endereco_bairro}"
-        })
-    return resultado
 
-# Buscar horários disponíveis de um médico num dia específico
+@app.get("/medicos/recomendados")
+def recomendar_medicos(latitude_paciente: float, longitude_paciente: float, db: Session = Depends(get_db), _: models.Usuario = Depends(exigir_roles("paciente", "admin"))):
+    medicos = db.query(models.Medico).all()
+    ordenados = sorted(((medico, calcular_distancia(latitude_paciente, longitude_paciente, medico.latitude, medico.longitude)) for medico in medicos), key=lambda item: (-item[0].avaliacao_media, item[1]))
+    return [{"id": medico.id, "nome": medico.nome, "especialidade": medico.especialidade, "crm": medico.crm, "avaliacao_media": medico.avaliacao_media, "distancia_km": round(distancia, 2), "morada": f"{medico.endereco_rua}, {medico.endereco_numero} - {medico.endereco_bairro}"} for medico, distancia in ordenados]
+
+
 @app.get("/medicos/{medico_id}/horarios-disponiveis")
-def listar_horarios_disponiveis(medico_id: int, data: str, db: Session = Depends(get_db)):
+def listar_horarios_disponiveis(medico_id: int, data: str, db: Session = Depends(get_db), _: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico"))):
     try:
-        data_consulta = datetime.strptime(data, "%Y-%m-%d").date()
+        dia = datetime.strptime(data, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Formato de data inválido. Use AAAA-MM-DD.")
-
-    medico = db.query(models.Medico).filter(models.Medico.id == medico_id).first()
+    medico = db.get(models.Medico, medico_id)
     if not medico:
         raise HTTPException(status_code=404, detail="Médico não encontrado.")
-
-    duracao = medico.duracao_consulta
-    horarios_possiveis = []
-
-    # Manhã: 08:00 às 12:00
-    hora_atual = datetime.combine(data_consulta, datetime.min.time().replace(hour=8))
-    fim_manha = datetime.combine(data_consulta, datetime.min.time().replace(hour=12))
-    while hora_atual + timedelta(minutes=duracao) <= fim_manha:
-        horarios_possiveis.append(hora_atual)
-        hora_atual += timedelta(minutes=duracao)
-
-    # Tarde: 13:00 às 18:00
-    hora_atual = datetime.combine(data_consulta, datetime.min.time().replace(hour=13))
-    fim_tarde = datetime.combine(data_consulta, datetime.min.time().replace(hour=18))
-    while hora_atual + timedelta(minutes=duracao) <= fim_tarde:
-        horarios_possiveis.append(hora_atual)
-        hora_atual += timedelta(minutes=duracao)
-
-    # Agendamentos ocupados no dia (excluindo os cancelados)
-    inicio_dia = datetime.combine(data_consulta, datetime.min.time().replace(hour=0, minute=0))
-    fim_dia = datetime.combine(data_consulta, datetime.min.time().replace(hour=23, minute=59))
-    
-    agendamentos_ocupados = db.query(models.Agendamento).filter(
-        models.Agendamento.medico_id == medico_id,
-        models.Agendamento.data_hora >= inicio_dia,
-        models.Agendamento.data_hora <= fim_dia,
-        models.Agendamento.status != "Cancelado"
-    ).all()
-
-    horas_ocupadas = [ag.data_hora for ag in agendamentos_ocupados]
-
-    horarios_livres = []
-    for hp in horarios_possiveis:
-        if hp not in horas_ocupadas:
-            horarios_livres.append(hp.strftime("%H:%M"))
-
-    return horarios_livres
+    possiveis = []
+    for inicio, fim in ((8, 12), (13, 18)):
+        horario = datetime.combine(dia, datetime.min.time().replace(hour=inicio))
+        limite = datetime.combine(dia, datetime.min.time().replace(hour=fim))
+        while horario + timedelta(minutes=medico.duracao_consulta) <= limite:
+            possiveis.append(horario)
+            horario += timedelta(minutes=medico.duracao_consulta)
+    ocupados = {agendamento.data_hora for agendamento in db.query(models.Agendamento).filter(models.Agendamento.medico_id == medico_id, models.Agendamento.data_hora >= datetime.combine(dia, datetime.min.time()), models.Agendamento.data_hora < datetime.combine(dia + timedelta(days=1), datetime.min.time()), models.Agendamento.status != "Cancelado").all()}
+    return [horario.strftime("%H:%M") for horario in possiveis if horario not in ocupados]
 
 
-# ==========================================
-# ROTAS DE AGENDAMENTOS
-# ==========================================
+@app.post("/agendamentos/", response_model=schemas.AgendamentoResponse, status_code=status.HTTP_201_CREATED)
+def criar_agendamento(agendamento: schemas.AgendamentoCreate, db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "paciente"))):
+    if agendamento.data_hora <= datetime.now():
+        raise HTTPException(status_code=400, detail="A consulta deve ser agendada para uma data futura.")
+    if usuario.role == "paciente" and paciente_do_usuario(usuario, db).id != agendamento.paciente_id:
+        raise HTTPException(status_code=403, detail="Você só pode agendar consultas para si mesmo.")
+    if not db.get(models.Medico, agendamento.medico_id) or not db.get(models.Paciente, agendamento.paciente_id):
+        raise HTTPException(status_code=404, detail="Médico ou paciente não encontrado.")
+    conflito = db.query(models.Agendamento).filter(models.Agendamento.medico_id == agendamento.medico_id, models.Agendamento.data_hora == agendamento.data_hora, models.Agendamento.status != "Cancelado").first()
+    if conflito:
+        raise HTTPException(status_code=409, detail="Este horário acabou de ser ocupado.")
+    novo = models.Agendamento(**agendamento.model_dump())
+    db.add(novo); db.commit(); db.refresh(novo)
+    return novo
 
-@app.post("/agendamentos/", response_model=schemas.AgendamentoResponse)
-def criar_agendamento(agendamento: schemas.AgendamentoCreate, db: Session = Depends(get_db)):
-    medico = db.query(models.Medico).filter(models.Medico.id == agendamento.medico_id).first()
-    if not medico:
-        raise HTTPException(status_code=404, detail="Médico não encontrado.")
 
-    paciente = db.query(models.Paciente).filter(models.Paciente.id == agendamento.paciente_id).first()
-    if not paciente:
-        raise HTTPException(status_code=404, detail="Paciente não encontrado.")
+@app.get("/agendamentos/", response_model=List[schemas.AgendamentoResponse])
+def listar_agendamentos(db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico"))):
+    consulta = db.query(models.Agendamento)
+    if usuario.role == "paciente": consulta = consulta.filter(models.Agendamento.paciente_id == paciente_do_usuario(usuario, db).id)
+    if usuario.role == "medico": consulta = consulta.filter(models.Agendamento.medico_id == medico_do_usuario(usuario, db).id)
+    return consulta.all()
 
-    novo_agendamento = models.Agendamento(**agendamento.dict())
-    db.add(novo_agendamento)
-    db.commit()
-    db.refresh(novo_agendamento)
-    return novo_agendamento
 
-@app.get("/agendamentos/")
-def listar_agendamentos(db: Session = Depends(get_db)):
-    return db.query(models.Agendamento).all()
-
-# Atualizar estado de uma consulta (Confirmado, Atendido, Cancelado)
 @app.patch("/agendamentos/{agendamento_id}/status", response_model=schemas.AgendamentoResponse)
-def atualizar_status_agendamento(agendamento_id: int, status_novo: str, db: Session = Depends(get_db)):
-    agendamento = db.query(models.Agendamento).filter(models.Agendamento.id == agendamento_id).first()
-    if not agendamento:
-        raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
-    
-    if status_novo not in ["Confirmado", "Atendido", "Cancelado"]:
-        raise HTTPException(status_code=400, detail="Estado inválido.")
-        
-    agendamento.status = status_novo
-    db.commit()
-    db.refresh(agendamento)
+def atualizar_status_agendamento(agendamento_id: int, status_novo: str, db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico"))):
+    agendamento = db.get(models.Agendamento, agendamento_id)
+    if not agendamento: raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
+    permitidos = {"Confirmado", "Atendido", "Cancelado"}
+    if status_novo not in permitidos: raise HTTPException(status_code=400, detail="Status inválido.")
+    if usuario.role == "paciente" and (agendamento.paciente_id != paciente_do_usuario(usuario, db).id or status_novo != "Cancelado"): raise HTTPException(status_code=403, detail="Paciente só pode cancelar a própria consulta.")
+    if usuario.role == "medico" and (agendamento.medico_id != medico_do_usuario(usuario, db).id or status_novo not in {"Confirmado", "Atendido"}): raise HTTPException(status_code=403, detail="Ação não permitida para este médico.")
+    agendamento.status = status_novo; db.commit(); db.refresh(agendamento)
     return agendamento
 
-@app.delete("/agendamentos/{agendamento_id}")
-def cancelar_agendamento(agendamento_id: int, db: Session = Depends(get_db)):
-    agendamento = db.query(models.Agendamento).filter(models.Agendamento.id == agendamento_id).first()
-    if not agendamento:
-        raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
-    db.delete(agendamento)
-    db.commit()
-    return {"mensagem": "Consulta removida com sucesso!"}
 
+@app.post("/exames/", response_model=schemas.ExameResponse, status_code=status.HTTP_201_CREATED)
+def criar_exame(exame: schemas.ExameCreate, db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "paciente"))):
+    if usuario.role == "paciente" and paciente_do_usuario(usuario, db).id != exame.paciente_id: raise HTTPException(status_code=403, detail="Você só pode solicitar exames para si mesmo.")
+    if not db.get(models.Paciente, exame.paciente_id): raise HTTPException(status_code=404, detail="Paciente não encontrado.")
+    novo = models.Exame(**exame.model_dump()); db.add(novo); db.commit(); db.refresh(novo)
+    return novo
 
-# ==========================================
-# ROTAS DE EXAMES (NOVO)
-# ==========================================
-
-@app.post("/exames/", response_model=schemas.ExameResponse)
-def criar_exame(exame: schemas.ExameCreate, db: Session = Depends(get_db)):
-    novo_exame = models.Exame(**exame.dict())
-    db.add(novo_exame)
-    db.commit()
-    db.refresh(novo_exame)
-    return novo_exame
 
 @app.get("/exames/", response_model=List[schemas.ExameResponse])
-def listar_exames(db: Session = Depends(get_db)):
-    return db.query(models.Exame).all()
+def listar_exames(db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico"))):
+    consulta = db.query(models.Exame)
+    if usuario.role == "paciente": consulta = consulta.filter(models.Exame.paciente_id == paciente_do_usuario(usuario, db).id)
+    return consulta.all()
 
-@app.patch("/exames/{exame_id}/status", response_model=schemas.ExameResponse)
-def atualizar_status_exame(exame_id: int, status_novo: str, db: Session = Depends(get_db)):
-    exame = db.query(models.Exame).filter(models.Exame.id == exame_id).first()
-    if not exame:
-        raise HTTPException(status_code=404, detail="Exame não encontrado.")
-    exame.status = status_novo
-    db.commit()
-    db.refresh(exame)
+
+@app.patch("/exames/{exame_id}/resultado", response_model=schemas.ExameResponse)
+def salvar_resultado_exame(exame_id: int, resultado: dict, db: Session = Depends(get_db), _: models.Usuario = Depends(exigir_roles("admin", "medico"))):
+    exame = db.get(models.Exame, exame_id)
+    texto_resultado = resultado.get("resultado", "").strip()
+    if not exame: raise HTTPException(status_code=404, detail="Exame não encontrado.")
+    if not texto_resultado: raise HTTPException(status_code=400, detail="Informe o resultado do exame.")
+    exame.resultado, exame.status = texto_resultado, "Concluído"; db.commit(); db.refresh(exame)
     return exame
 
 
-# ==========================================
-# ROTAS DE AVALIAÇÕES (NOVO)
-# ==========================================
-
-@app.post("/avaliacoes/", response_model=schemas.AvaliacaoResponse)
-def criar_avaliacao(avaliacao: schemas.AvaliacaoCreate, db: Session = Depends(get_db)):
-    # 1. Verifica se já existe algum registo para esta consulta específica
-    db_avaliacao = db.query(models.Avaliacao).filter(models.Avaliacao.agendamento_id == avaliacao.agendamento_id).first()
-    
-    if db_avaliacao:
-        # 2. Se já existir, o Python FUNDE os dados (atualiza o texto do médico)
-        db_avaliacao.comentario_medico = avaliacao.comentario_medico
-        db_avaliacao.nota_paciente = avaliacao.nota_paciente
-        db.commit()
-        db.refresh(db_avaliacao)
-        return db_avaliacao
-    else:
-        # 3. Se a consulta estiver "limpa", cria um registo novo do zero
-        nova_avaliacao = models.Avaliacao(**avaliacao.dict())
-        db.add(nova_avaliacao)
-        db.commit()
-        db.refresh(nova_avaliacao)
-        return nova_avaliacao
+@app.post("/avaliacoes/", response_model=schemas.AvaliacaoResponse, status_code=status.HTTP_201_CREATED)
+def criar_avaliacao(avaliacao: schemas.AvaliacaoCreate, db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("paciente", "medico"))):
+    agendamento = db.get(models.Agendamento, avaliacao.agendamento_id)
+    if not agendamento or agendamento.paciente_id != avaliacao.paciente_id or agendamento.medico_id != avaliacao.medico_id: raise HTTPException(status_code=400, detail="Avaliação não corresponde ao agendamento.")
+    if usuario.role == "paciente" and paciente_do_usuario(usuario, db).id != avaliacao.paciente_id: raise HTTPException(status_code=403, detail="Você só pode avaliar a própria consulta.")
+    if usuario.role == "medico" and medico_do_usuario(usuario, db).id != avaliacao.medico_id: raise HTTPException(status_code=403, detail="Você só pode avaliar suas consultas.")
+    existente = db.query(models.Avaliacao).filter(models.Avaliacao.agendamento_id == avaliacao.agendamento_id).first()
+    if existente:
+        if usuario.role != "medico": raise HTTPException(status_code=409, detail="Esta consulta já foi avaliada.")
+        existente.comentario_medico, existente.nota_paciente = avaliacao.comentario_medico, avaliacao.nota_paciente; db.commit(); db.refresh(existente); return existente
+    novo = models.Avaliacao(**avaliacao.model_dump()); db.add(novo); db.commit(); db.refresh(novo)
+    return novo
 
 
-@app.get("/avaliacoes/", response_model=list[schemas.AvaliacaoResponse])
-def listar_avaliacoes(db: Session = Depends(get_db)):
-    return db.query(models.Avaliacao).all()
+@app.get("/avaliacoes/", response_model=List[schemas.AvaliacaoResponse])
+def listar_avaliacoes(db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico"))):
+    consulta = db.query(models.Avaliacao)
+    if usuario.role == "paciente": consulta = consulta.filter(models.Avaliacao.paciente_id == paciente_do_usuario(usuario, db).id)
+    if usuario.role == "medico": consulta = consulta.filter(models.Avaliacao.medico_id == medico_do_usuario(usuario, db).id)
+    return consulta.all()
 
 
-# ==========================================
-# ROTAS DE AUTENTICAÇÃO (SISTEMA DE LOGIN)
-# ==========================================
-
-@app.post("/auth/registrar", response_model=schemas.UsuarioResponse)
+@app.post("/auth/registrar", response_model=schemas.UsuarioResponse, status_code=status.HTTP_201_CREATED)
 def registrar_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db)):
-    # Verifica se o e-mail já existe
-    usuario_existente = db.query(models.Usuario).filter(models.Usuario.email == usuario.email).first()
-    if usuario_existente:
-        raise HTTPException(status_code=400, detail="E-mail já cadastrado.")
-
-    # Criptografa a senha antes de salvar no banco
-    senha_segura = obter_senha_criptografada(usuario.password)
-    
-    novo_usuario = models.Usuario(
-        email=usuario.email,
-        senha_hash=senha_segura,
-        role=usuario.role
-    )
-    db.add(novo_usuario)
-    db.commit()
-    db.refresh(novo_usuario)
-    return novo_usuario
+    if usuario.role == "admin" and db.query(models.Usuario).filter(models.Usuario.role == "admin").first(): raise HTTPException(status_code=403, detail="Administradores só podem ser criados por administração autorizada.")
+    if db.query(models.Usuario).filter(models.Usuario.email == usuario.email).first(): raise HTTPException(status_code=400, detail="E-mail já cadastrado.")
+    novo = models.Usuario(email=usuario.email, senha_hash=senha_hash(usuario.password), role=usuario.role)
+    db.add(novo); db.flush()
+    if usuario.role == "paciente":
+        perfil = db.query(models.Paciente).filter(models.Paciente.email == usuario.email, models.Paciente.usuario_id.is_(None)).first()
+    elif usuario.role == "medico":
+        perfil = db.query(models.Medico).filter(models.Medico.email == usuario.email, models.Medico.usuario_id.is_(None)).first()
+    else: perfil = None
+    if perfil: perfil.usuario_id = novo.id
+    db.commit(); db.refresh(novo)
+    return novo
 
 
 @app.post("/auth/login", response_model=schemas.Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # 1. Procura o usuário pelo e-mail (enviado no campo username do form)
     usuario = db.query(models.Usuario).filter(models.Usuario.email == form_data.username).first()
-    if not usuario:
-        raise HTTPException(status_code=400, detail="E-mail ou senha incorretos.")
+    if not usuario or not verificar_senha(form_data.password, usuario.senha_hash): raise HTTPException(status_code=400, detail="E-mail ou senha incorretos.")
+    return {"access_token": criar_token_acesso({"sub": usuario.email, "role": usuario.role}), "token_type": "bearer", "role": usuario.role}
 
-    # 2. Verifica se a senha está correta
-    if not verificar_senha(form_data.password, usuario.senha_hash):
-        raise HTTPException(status_code=400, detail="E-mail ou senha incorretos.")
 
-    # 3. Se estiver tudo certo, gera o Token com os dados dele
-    token_acesso = criar_token_acesso(dados={"sub": usuario.email, "role": usuario.role})
-    
-    return {
-        "access_token": token_acesso,
-        "token_type": "bearer",
-        "role": usuario.role
-    }
+@app.post("/auth/solicitar-recuperacao", status_code=status.HTTP_202_ACCEPTED)
+def solicitar_recuperacao_senha(dados: schemas.RecuperacaoSenhaRequest, db: Session = Depends(get_db)):
+    """Sempre responde de forma genérica para não revelar e-mails cadastrados."""
+    usuario = db.query(models.Usuario).filter(models.Usuario.email == dados.email).first()
+    if usuario:
+        try:
+            enviar_link_recuperacao(usuario.email, criar_token_recuperacao(usuario))
+        except Exception:
+            # Não expõe a falha do serviço de e-mail ao solicitante; registre no servidor.
+            print("[RECUPERACAO DE SENHA] Não foi possível enviar o e-mail de recuperação.")
+    return {"mensagem": "Se o e-mail estiver cadastrado, você receberá as instruções para redefinir sua senha."}
+
+
+@app.post("/auth/redefinir-senha")
+def redefinir_senha(dados: schemas.RedefinirSenhaRequest, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(dados.token, SECRET_KEY, algorithms=[ALGORITHM])
+    except InvalidTokenError:
+        raise HTTPException(status_code=400, detail="O link de recuperação é inválido ou expirou.")
+    if payload.get("purpose") != "password_reset" or not payload.get("sub"):
+        raise HTTPException(status_code=400, detail="O link de recuperação é inválido.")
+    usuario = db.query(models.Usuario).filter(models.Usuario.email == payload["sub"]).first()
+    if not usuario or payload.get("rv") != usuario.reset_version:
+        raise HTTPException(status_code=400, detail="O link de recuperação é inválido.")
+    usuario.senha_hash = senha_hash(dados.nova_senha)
+    usuario.reset_version += 1
+    db.commit()
+    return {"mensagem": "Senha atualizada com sucesso. Faça login com a nova senha."}

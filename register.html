@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clínica Saúde - Cadastro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body class="app-shell bg-gray-100 min-h-screen flex items-center justify-center font-sans p-5">
+
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100">
+        <div class="text-center mb-6">
+            <span class="brand-mark mx-auto mb-4" aria-hidden="true">+</span>
+            <h1 class="text-2xl font-extrabold text-blue-800">Criar Conta</h1>
+            <p class="text-gray-500 text-sm mt-2">Registe-se para aceder ao portal</p>
+        </div>
+
+        <form id="form-register" class="space-y-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700">E-mail</label>
+                <input type="email" id="email" required placeholder="exemplo@clinica.com" 
+                       class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700">Palavra-passe</label>
+                <input type="password" id="password" required placeholder="Mín. 8 caracteres" 
+                       class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700">Confirmar palavra-passe</label>
+                <input type="password" id="confirm_password" required placeholder="Repita a palavra-passe" 
+                       class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700">Perfil</label>
+                <select id="role" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <option value="paciente" selected>Paciente</option>
+                    <option value="medico">Médico</option>
+                </select>
+            </div>
+
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition shadow-md hover:shadow-lg">
+                Criar Conta
+            </button>
+        </form>
+
+        <div class="mt-5 text-center">
+            <a href="login.html" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline">Já tem conta? Iniciar sessão</a>
+        </div>
+
+        <p id="msg-erro" class="text-red-500 text-sm font-semibold mt-4 text-center hidden"></p>
+        <p id="msg-sucesso" class="text-green-600 text-sm font-semibold mt-4 text-center hidden"></p>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+
+        document.getElementById('form-register').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const confirm = document.getElementById('confirm_password').value;
+            const role = document.getElementById('role').value;
+            const msgErro = document.getElementById('msg-erro');
+            const msgSucesso = document.getElementById('msg-sucesso');
+
+            msgErro.classList.add('hidden'); msgSucesso.classList.add('hidden');
+
+            if (password.length < 8) {
+                msgErro.textContent = 'A palavra-passe deve ter pelo menos 8 caracteres.';
+                msgErro.classList.remove('hidden');
+                return;
+            }
+            if (password !== confirm) {
+                msgErro.textContent = 'As palavras-passe não coincidem.';
+                msgErro.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const resposta = await fetch(`${API_URL}/auth/registrar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, role })
+                });
+
+                if (resposta.ok) {
+                    msgSucesso.textContent = 'Conta criada com sucesso. A redirecionar para o login...';
+                    msgSucesso.classList.remove('hidden');
+                    setTimeout(() => window.location.href = 'login.html', 1400);
+                } else {
+                    const erro = await resposta.json();
+                    msgErro.textContent = erro.detail || 'Erro ao criar conta.';
+                    msgErro.classList.remove('hidden');
+                }
+            } catch (err) {
+                msgErro.textContent = 'Erro ao contactar o servidor.';
+                msgErro.classList.remove('hidden');
+            }
+        });
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>

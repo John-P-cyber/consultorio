@@ -1,0 +1,15 @@
+:root { --brand-950:#0b1f3a; --brand-800:#123d70; --brand-600:#2563eb; --surface:#fff; --canvas:#f4f7fb; --ink:#172033; --muted:#667085; --line:#e4eaf2; }
+* { box-sizing:border-box; }
+body.app-shell { min-height:100vh; color:var(--ink); background:radial-gradient(circle at top right,#dbeafe 0,transparent 30rem),var(--canvas); letter-spacing:-.01em; }
+body.app-shell nav, body.app-shell .app-topbar { background:rgba(255,255,255,.94); border-color:var(--line); box-shadow:0 1px 2px rgba(15,23,42,.04); backdrop-filter:blur(12px); }
+body.app-shell .bg-white.rounded-xl, body.app-shell .bg-white.rounded-2xl { border-color:var(--line); box-shadow:0 12px 30px rgba(15,23,42,.055); }
+body.app-shell input, body.app-shell select, body.app-shell textarea { border-color:#d7dee9; background-color:#fbfcfe; color:var(--ink); transition:border-color .18s ease,box-shadow .18s ease,background-color .18s ease; }
+body.app-shell input:focus, body.app-shell select:focus, body.app-shell textarea:focus { outline:0; border-color:var(--brand-600); background-color:#fff; box-shadow:0 0 0 3px rgba(37,99,235,.14); }
+body.app-shell button { transition:transform .16s ease,box-shadow .16s ease,background-color .16s ease; }
+body.app-shell button:hover { transform:translateY(-1px); }
+body.app-shell button:focus-visible { outline:3px solid rgba(37,99,235,.35); outline-offset:2px; }
+.brand-mark { display:inline-grid; width:2.25rem; height:2.25rem; place-items:center; border-radius:.75rem; color:#fff; background:linear-gradient(135deg,var(--brand-800),var(--brand-600)); box-shadow:0 8px 18px rgba(37,99,235,.24); font-weight:800; }
+.page-kicker { color:var(--brand-600); font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+.app-toast { position:fixed; right:1.5rem; bottom:1.5rem; z-index:100; max-width:min(26rem,calc(100vw - 3rem)); padding:1rem 1.15rem; border-radius:.85rem; color:#fff; background:#172033; box-shadow:0 16px 38px rgba(15,23,42,.25); animation:toast-in .2s ease-out; }
+.app-toast[data-kind="error"] { background:#b42318; }.app-toast[data-kind="success"] { background:#067647; }@keyframes toast-in { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@media(max-width:640px) { body.app-shell nav{padding:1rem;align-items:flex-start;gap:.75rem} body.app-shell nav>div:last-child{gap:.5rem} body.app-shell nav #nome-paciente-topo,body.app-shell nav #nome-medico-topo{display:none} body.app-shell .max-w-6xl{padding:1.25rem} body.app-shell h1{font-size:1.75rem;line-height:2.1rem} }

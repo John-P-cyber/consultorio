@@ -1,12 +1,19 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime, date
 from typing import Optional
 
 # --- SCHEMAS DE USUÁRIOS E AUTENTICAÇÃO (NOVO) ---
 class UsuarioCreate(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8, max_length=128)
     role: str # "admin", "medico", "paciente"
+
+    @field_validator("role")
+    @classmethod
+    def validar_role(cls, value: str) -> str:
+        if value not in {"admin", "medico", "paciente"}:
+            raise ValueError("Perfil inválido.")
+        return value
 
 class UsuarioResponse(BaseModel):
     id: int
@@ -25,6 +32,13 @@ class TokenData(BaseModel):
     email: Optional[str] = None
     role: Optional[str] = None
 
+class RecuperacaoSenhaRequest(BaseModel):
+    email: EmailStr
+
+class RedefinirSenhaRequest(BaseModel):
+    token: str = Field(min_length=20)
+    nova_senha: str = Field(min_length=8, max_length=128)
+
 # --- SCHEMAS DE PACIENTES ---
 class PacienteCreate(BaseModel):
     nome: str
@@ -41,6 +55,14 @@ class PacienteCreate(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
+    @field_validator("cpf")
+    @classmethod
+    def validar_cpf(cls, value: str) -> str:
+        cpf = "".join(char for char in value if char.isdigit())
+        if len(cpf) != 11 or len(set(cpf)) == 1:
+            raise ValueError("CPF inválido.")
+        return cpf
+
 class PacienteResponse(PacienteCreate):
     id: int
 
@@ -52,7 +74,7 @@ class PacienteResponse(PacienteCreate):
 class MedicoCreate(BaseModel):
     nome: str
     especialidade: str
-    duracao_consulta: int
+    duracao_consulta: int = Field(ge=10, le=240)
     crm: str
     email: EmailStr
     foto_perfil: Optional[str] = None
@@ -93,9 +115,9 @@ class AvaliacaoCreate(BaseModel):
     agendamento_id: int
     paciente_id: int
     medico_id: int
-    nota_medico: int
+    nota_medico: int = Field(ge=1, le=5)
     comentario_paciente: Optional[str] = None
-    nota_paciente: Optional[int] = None
+    nota_paciente: Optional[int] = Field(default=None, ge=1, le=5)
     comentario_medico: Optional[str] = None
 
 class AvaliacaoResponse(AvaliacaoCreate):

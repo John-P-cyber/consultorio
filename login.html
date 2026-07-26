@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clínica Saúde - Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="app.css">
 </head>
-<body class="bg-gray-100 h-screen flex items-center justify-center font-sans">
+<body class="app-shell bg-gray-100 min-h-screen flex items-center justify-center font-sans p-5">
 
     <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100">
         
         <div class="text-center mb-8">
+            <span class="brand-mark mx-auto mb-4" aria-hidden="true">+</span>
             <h1 class="text-3xl font-extrabold text-blue-800">Clínica Saúde</h1>
             <p class="text-gray-500 text-sm mt-2">Introduza as suas credenciais para aceder ao portal</p>
         </div>
@@ -33,6 +35,12 @@
             </button>
         </form>
 
+        <div class="mt-5 text-center">
+            <a href="recuperar-senha.html" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline">Esqueceu sua senha?</a>
+            <div class="mt-2">
+                <a href="register.html" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline">Criar conta</a>
+            </div>
+        </div>
         <p id="msg-erro" class="text-red-500 text-sm font-semibold mt-4 text-center hidden"></p>
     </div>
 
@@ -88,5 +96,6 @@
             }
         });
     </script>
+    <script src="app.js"></script>
 </body>
 </html>
