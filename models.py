@@ -22,7 +22,7 @@ from database import Base
 class Clinica(Base):
     __tablename__ = "clinicas"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     nome = Column(String(160), nullable=False)
     slug = Column(String(80), nullable=False, unique=True, index=True)
     ativo = Column(Boolean, nullable=False, default=True)
@@ -46,7 +46,7 @@ class Clinica(Base):
 class Usuario(Base):
     __tablename__ = "usuarios"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     email = Column(String, index=True, nullable=False)
     senha_hash = Column(String, nullable=False)
@@ -106,7 +106,7 @@ class SessaoUsuario(Base):
 class MfaCodigoRecuperacao(Base):
     __tablename__ = "mfa_codigos_recuperacao"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
     codigo_hash = Column(String(64), nullable=False, unique=True)
@@ -124,7 +124,7 @@ class MfaCodigoRecuperacao(Base):
 class Paciente(Base):
     __tablename__ = "pacientes"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), unique=True, nullable=True)
     nome = Column(String, nullable=False)
@@ -163,7 +163,7 @@ class Paciente(Base):
 class Medico(Base):
     __tablename__ = "medicos"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), unique=True, nullable=True)
     nome = Column(String, nullable=False)
@@ -200,7 +200,7 @@ class Medico(Base):
 class Agendamento(Base):
     __tablename__ = "agendamentos"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False)
     medico_id = Column(Integer, ForeignKey("medicos.id"), nullable=False)
@@ -230,7 +230,7 @@ class Agendamento(Base):
 class Exame(Base):
     __tablename__ = "exames"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False)
     tipo_exame = Column(String, nullable=False)
@@ -248,7 +248,7 @@ class Exame(Base):
 class Avaliacao(Base):
     __tablename__ = "avaliacoes"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     agendamento_id = Column(Integer, ForeignKey("agendamentos.id"), unique=True, nullable=False)
     paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False)
@@ -272,7 +272,7 @@ class ProntuarioEntrada(Base):
 
     __tablename__ = "prontuario_entradas"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     serie_id = Column(String(36), nullable=False, index=True)
     versao = Column(Integer, nullable=False)
@@ -318,7 +318,7 @@ class ProntuarioEntrada(Base):
 class AnexoProntuario(Base):
     __tablename__ = "anexos_prontuario"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     prontuario_id = Column(Integer, ForeignKey("prontuario_entradas.id", ondelete="RESTRICT"), nullable=False, index=True)
     enviado_por_usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
@@ -347,7 +347,7 @@ class AnexoProntuario(Base):
 class Prescricao(Base):
     __tablename__ = "prescricoes"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     prontuario_id = Column(Integer, ForeignKey("prontuario_entradas.id", ondelete="RESTRICT"), nullable=True, index=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id", ondelete="RESTRICT"), nullable=False, index=True)
@@ -377,7 +377,7 @@ class Prescricao(Base):
 class ItemPrescricao(Base):
     __tablename__ = "itens_prescricao"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     prescricao_id = Column(Integer, ForeignKey("prescricoes.id", ondelete="RESTRICT"), nullable=False, index=True)
     medicamento = Column(String(200), nullable=False)
@@ -395,7 +395,7 @@ class ItemPrescricao(Base):
 class EventoPrescricao(Base):
     __tablename__ = "eventos_prescricao"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     prescricao_id = Column(Integer, ForeignKey("prescricoes.id", ondelete="RESTRICT"), nullable=False, index=True)
     autor_usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
@@ -416,7 +416,7 @@ class EventoPrescricao(Base):
 class RegistroAuditoria(Base):
     __tablename__ = "registros_auditoria"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     ator_usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True)
     ator_referencia = Column(String(80), nullable=False)
@@ -446,7 +446,7 @@ class RegistroAuditoria(Base):
 class Consentimento(Base):
     __tablename__ = "consentimentos"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id", ondelete="CASCADE"), nullable=True, index=True)
@@ -475,7 +475,7 @@ class Consentimento(Base):
 class SolicitacaoLGPD(Base):
     __tablename__ = "solicitacoes_lgpd"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
     paciente_id = Column(Integer, ForeignKey("pacientes.id", ondelete="SET NULL"), nullable=True, index=True)
     usuario_solicitante_id = Column(Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
