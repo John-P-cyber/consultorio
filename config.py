@@ -1,5 +1,6 @@
 """Configurações da aplicação carregadas do ambiente."""
 import os
+import re
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit, quote
 
@@ -54,10 +55,19 @@ RESET_URL = os.getenv(
     else "http://127.0.0.1:8000/recuperar-senha.html",
 )
 SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_PORT = int(os.getenv("SMTP_PORT") or "587")
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USERNAME or "nao-responda@clinica.local")
+SMTP_FROM = os.getenv("SMTP_FROM") or SMTP_USERNAME or "nao-responda@clinica.local"
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes", "sim"}
+SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() in {"1", "true", "yes", "sim"}
+SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "15"))
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
+WHATSAPP_API_VERSION = os.getenv("WHATSAPP_API_VERSION", "v23.0")
+COMMUNICATION_WORKER_ENABLED = os.getenv("COMMUNICATION_WORKER_ENABLED", "false").lower() in {
+    "1", "true", "yes", "sim"
+}
+COMMUNICATION_WORKER_INTERVAL_SECONDS = int(os.getenv("COMMUNICATION_WORKER_INTERVAL_SECONDS", "300"))
 ADMIN_BOOTSTRAP_TOKEN = os.getenv("ADMIN_BOOTSTRAP_TOKEN")
 CLINIC_PROVISIONING_TOKEN = os.getenv("CLINIC_PROVISIONING_TOKEN", ADMIN_BOOTSTRAP_TOKEN)
 TERMOS_VERSAO = os.getenv("TERMOS_VERSAO", "2026-08-01")
@@ -110,6 +120,14 @@ if DB_POOL_RECYCLE_SECONDS < 60 or DB_POOL_RECYCLE_SECONDS > 86400:
     raise RuntimeError("DB_POOL_RECYCLE_SECONDS deve estar entre 60 e 86400.")
 if COOKIE_SAMESITE not in {"strict", "lax"}:
     raise RuntimeError("COOKIE_SAMESITE deve ser 'strict' ou 'lax'.")
+if SMTP_USE_SSL and SMTP_USE_TLS:
+    raise RuntimeError("SMTP_USE_SSL e SMTP_USE_TLS não podem estar habilitados ao mesmo tempo.")
+if SMTP_TIMEOUT_SECONDS < 3 or SMTP_TIMEOUT_SECONDS > 120:
+    raise RuntimeError("SMTP_TIMEOUT_SECONDS deve estar entre 3 e 120.")
+if not re.fullmatch(r"v[0-9]+\.[0-9]+", WHATSAPP_API_VERSION):
+    raise RuntimeError("WHATSAPP_API_VERSION deve usar o formato vNN.N.")
+if COMMUNICATION_WORKER_INTERVAL_SECONDS < 60 or COMMUNICATION_WORKER_INTERVAL_SECONDS > 3600:
+    raise RuntimeError("COMMUNICATION_WORKER_INTERVAL_SECONDS deve estar entre 60 e 3600.")
 if ACCESS_TOKEN_EXPIRE_MINUTES < 5 or ACCESS_TOKEN_EXPIRE_MINUTES > 30:
     raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES deve estar entre 5 e 30 minutos.")
 if REFRESH_TOKEN_EXPIRE_DAYS < 1 or REFRESH_TOKEN_EXPIRE_DAYS > 90:

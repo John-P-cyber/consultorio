@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agenda profissional | Clínica Saúde</title>
+    <link rel="stylesheet" href="tailwind.css">
+    <link rel="stylesheet" href="app.css">
+</head>
+<body class="app-shell bg-gray-50 font-sans text-gray-800 min-h-screen">
+    <header class="bg-white border-b border-gray-200 shadow-sm">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex flex-wrap gap-4 items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="brand-mark" aria-hidden="true">+</span>
+                <div><p class="page-kicker">Gestão assistencial</p><h1 class="text-2xl font-extrabold text-blue-950">Agenda profissional</h1></div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a id="voltar-portal" href="index.html" class="text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg">Voltar ao portal</a>
+                <button onclick="encerrarSessao()" class="text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-lg">Sair</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-6 py-8 space-y-6">
+        <section class="bg-blue-950 text-white rounded-2xl p-6 shadow-md">
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-5">
+                <div><p class="text-xs font-bold uppercase tracking-widest text-blue-200">Configuração individual</p><h2 class="text-2xl font-bold mt-2">Disponibilidade, serviços e bloqueios</h2><p class="text-blue-100 text-sm mt-2 max-w-3xl">Os horários oferecidos aos pacientes são calculados a partir destas regras e dos compromissos já existentes.</p></div>
+                <div id="seletor-medico-container" class="w-full md:max-w-md">
+                    <label for="seletor-medico" class="block text-xs font-bold uppercase text-blue-100">Profissional</label>
+                    <select id="seletor-medico" class="mt-1 w-full border border-blue-300 rounded-lg p-3 bg-white text-gray-900"></select>
+                </div>
+            </div>
+        </section>
+
+        <div id="estado-vazio" class="hidden bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-5">Cadastre um médico antes de configurar a agenda.</div>
+
+        <div id="conteudo-agenda" class="space-y-6">
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <div class="flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 pb-4 mb-5">
+                    <div><h2 class="text-xl font-bold text-gray-900">Disponibilidade semanal</h2><p class="text-sm text-gray-500 mt-1">Adicione quantas faixas precisar. Use duas faixas para representar o intervalo de almoço.</p></div>
+                    <button id="salvar-disponibilidade" class="bg-blue-700 hover:bg-blue-800 text-white font-bold px-5 py-2.5 rounded-lg">Salvar disponibilidade</button>
+                </div>
+                <div id="dias-semana" class="space-y-3"></div>
+            </section>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                    <h2 class="text-xl font-bold text-gray-900">Tipos de consulta</h2>
+                    <p class="text-sm text-gray-500 mt-1">A duração e o intervalo posterior são preservados em cada agendamento.</p>
+                    <form id="form-tipo" class="mt-5 space-y-4">
+                        <input type="hidden" id="tipo-id">
+                        <div><label for="tipo-nome" class="text-sm font-semibold">Nome</label><input id="tipo-nome" required minlength="2" maxlength="100" placeholder="Ex.: Primeira consulta" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"></div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><label for="tipo-duracao" class="text-sm font-semibold">Duração (min)</label><input id="tipo-duracao" type="number" min="10" max="240" value="30" required class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"></div>
+                            <div><label for="tipo-intervalo" class="text-sm font-semibold">Intervalo após (min)</label><input id="tipo-intervalo" type="number" min="0" max="120" value="0" required class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"></div>
+                        </div>
+                        <label class="flex items-center gap-3 text-sm"><input id="tipo-retorno" type="checkbox" class="h-4 w-4"><span>Este tipo representa um retorno</span></label>
+                        <div id="campo-prazo-retorno" class="hidden"><label for="tipo-prazo" class="text-sm font-semibold">Prazo máximo desde a consulta (dias)</label><input id="tipo-prazo" type="number" min="1" max="365" value="30" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"></div>
+                        <div class="flex gap-3"><button type="submit" class="flex-1 bg-green-700 hover:bg-green-800 text-white font-bold py-2.5 rounded-lg">Salvar tipo</button><button id="cancelar-edicao-tipo" type="button" class="hidden px-4 bg-gray-200 hover:bg-gray-300 font-bold rounded-lg">Cancelar edição</button></div>
+                    </form>
+                    <div id="lista-tipos" class="mt-5 space-y-3"></div>
+                </section>
+
+                <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                    <h2 class="text-xl font-bold text-gray-900">Regras de cancelamento</h2>
+                    <p class="text-sm text-gray-500 mt-1">Administradores e médicos ainda podem cancelar quando necessário, deixando o motivo registrado.</p>
+                    <form id="form-regras" class="mt-5 space-y-5">
+                        <label class="flex items-start gap-3"><input id="permite-cancelamento" type="checkbox" class="mt-1 h-4 w-4"><span><strong class="block text-sm">Permitir cancelamento pelo paciente</strong><span class="text-xs text-gray-500">Quando desativado, o paciente deve contactar a clínica.</span></span></label>
+                        <div><label for="antecedencia-cancelamento" class="text-sm font-semibold">Antecedência mínima (horas)</label><input id="antecedencia-cancelamento" type="number" min="0" max="720" required class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"><p class="text-xs text-gray-500 mt-1">Use 0 para permitir até o horário da consulta.</p></div>
+                        <button type="submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2.5 rounded-lg">Salvar política</button>
+                    </form>
+                </section>
+            </div>
+
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <div class="border-b border-gray-100 pb-4"><h2 class="text-xl font-bold text-gray-900">Férias, feriados e bloqueios</h2><p class="text-sm text-gray-500 mt-1">A criação é impedida quando já existem consultas ativas no período, evitando conflitos silenciosos.</p></div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-5">
+                    <form id="form-bloqueio" class="space-y-4">
+                        <div><label for="bloqueio-tipo" class="text-sm font-semibold">Tipo</label><select id="bloqueio-tipo" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"><option value="bloqueio">Bloqueio pontual</option><option value="ferias">Férias</option><option value="feriado">Feriado</option></select></div>
+                        <label id="campo-feriado-global" class="hidden flex items-center gap-3 text-sm"><input id="feriado-global" type="checkbox" class="h-4 w-4"><span>Aplicar a todos os médicos da clínica</span></label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3"><div><label for="bloqueio-inicio" class="text-sm font-semibold">Início</label><input id="bloqueio-inicio" type="datetime-local" required class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"></div><div><label for="bloqueio-fim" class="text-sm font-semibold">Fim</label><input id="bloqueio-fim" type="datetime-local" required class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"></div></div>
+                        <div><label for="bloqueio-motivo" class="text-sm font-semibold">Motivo</label><input id="bloqueio-motivo" required minlength="2" maxlength="300" placeholder="Ex.: Congresso médico" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"></div>
+                        <button type="submit" class="w-full bg-amber-700 hover:bg-amber-800 text-white font-bold py-2.5 rounded-lg">Adicionar indisponibilidade</button>
+                    </form>
+                    <div><h3 class="text-sm font-bold uppercase tracking-wide text-gray-600 mb-3">Períodos cadastrados</h3><div id="lista-bloqueios" class="space-y-3 max-h-[85vh] overflow-y-auto"></div></div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        const API_URL = window.location.origin;
+        const NOMES_DIAS = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+        let sessao = null;
+        let medicoAtual = null;
+        let agendaAtual = null;
+        let faixasPorDia = Object.fromEntries(NOMES_DIAS.map((_, indice) => [indice, []]));
+
+        async function api(url, opcoes = {}) {
+            const resposta = await fetch(`${API_URL}${url}`, opcoes);
+            const dados = resposta.status === 204 ? null : await resposta.json();
+            if (!resposta.ok) throw new Error(mensagemErroAPI(dados));
+            return dados;
+        }
+
+        function faixaVazia() { return {hora_inicio: '08:00', hora_fim: '12:00'}; }
+
+        function renderizarDias() {
+            const container = document.getElementById('dias-semana');
+            container.innerHTML = NOMES_DIAS.map((nome, dia) => `
+                <article class="border border-gray-200 rounded-xl p-4">
+                    <div class="flex flex-wrap gap-3 items-center justify-between"><strong class="text-gray-800">${nome}</strong><button type="button" onclick="adicionarFaixa(${dia})" class="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg">+ Adicionar faixa</button></div>
+                    <div class="mt-3 space-y-2">${faixasPorDia[dia].length ? faixasPorDia[dia].map((faixa, indice) => `
+                        <div class="grid grid-cols-1 sm:grid-cols-5 gap-2 items-center">
+                            <label class="sm:col-span-2 text-xs text-gray-500">Início<input type="time" value="${faixa.hora_inicio.slice(0, 5)}" onchange="alterarFaixa(${dia}, ${indice}, 'hora_inicio', this.value)" class="mt-1 w-full border border-gray-300 rounded-lg p-2"></label>
+                            <label class="sm:col-span-2 text-xs text-gray-500">Fim<input type="time" value="${faixa.hora_fim.slice(0, 5)}" onchange="alterarFaixa(${dia}, ${indice}, 'hora_fim', this.value)" class="mt-1 w-full border border-gray-300 rounded-lg p-2"></label>
+                            <button type="button" onclick="removerFaixa(${dia}, ${indice})" class="self-end text-red-600 bg-red-50 hover:bg-red-100 font-bold rounded-lg p-2">Remover</button>
+                        </div>`).join('') : '<p class="text-sm text-gray-400 italic">Indisponível neste dia.</p>'}</div>
+                </article>`).join('');
+        }
+
+        function adicionarFaixa(dia) { faixasPorDia[dia].push(faixaVazia()); renderizarDias(); }
+        function removerFaixa(dia, indice) { faixasPorDia[dia].splice(indice, 1); renderizarDias(); }
+        function alterarFaixa(dia, indice, campo, valor) { faixasPorDia[dia][indice][campo] = valor; }
+
+        function limparFormTipo() {
+            document.getElementById('form-tipo').reset();
+            document.getElementById('tipo-id').value = '';
+            document.getElementById('tipo-duracao').value = 30;
+            document.getElementById('tipo-intervalo').value = 0;
+            document.getElementById('tipo-prazo').value = 30;
+            document.getElementById('campo-prazo-retorno').classList.add('hidden');
+            document.getElementById('cancelar-edicao-tipo').classList.add('hidden');
+        }
+
+        function editarTipo(id) {
+            const tipo = agendaAtual.tipos_consulta.find(item => item.id === id);
+            document.getElementById('tipo-id').value = tipo.id;
+            document.getElementById('tipo-nome').value = tipo.nome;
+            document.getElementById('tipo-duracao').value = tipo.duracao_minutos;
+            document.getElementById('tipo-intervalo').value = tipo.intervalo_minutos;
+            document.getElementById('tipo-retorno').checked = tipo.e_retorno;
+            document.getElementById('tipo-prazo').value = tipo.prazo_retorno_dias || 30;
+            document.getElementById('campo-prazo-retorno').classList.toggle('hidden', !tipo.e_retorno);
+            document.getElementById('cancelar-edicao-tipo').classList.remove('hidden');
+            document.getElementById('tipo-nome').focus();
+        }
+
+        function renderizarTipos() {
+            document.getElementById('lista-tipos').innerHTML = agendaAtual.tipos_consulta.map(tipo => `
+                <article class="border ${tipo.ativo ? 'border-gray-200' : 'border-gray-100 bg-gray-50'} rounded-xl p-3 flex items-center justify-between gap-3">
+                    <div><strong class="text-sm ${tipo.ativo ? 'text-gray-800' : 'text-gray-400'}">${escapeHTML(tipo.nome)}</strong><p class="text-xs text-gray-500 mt-1">${tipo.duracao_minutos} min + ${tipo.intervalo_minutos} min de intervalo${tipo.e_retorno ? ` · retorno em até ${tipo.prazo_retorno_dias} dias` : ''}</p></div>
+                    <div class="flex gap-2"><button onclick="editarTipo(${tipo.id})" class="text-xs font-bold text-blue-700">Editar</button><button onclick="alternarTipo(${tipo.id}, ${!tipo.ativo})" class="text-xs font-bold ${tipo.ativo ? 'text-red-600' : 'text-green-700'}">${tipo.ativo ? 'Desativar' : 'Ativar'}</button></div>
+                </article>`).join('') || '<p class="text-sm text-gray-500">Nenhum tipo cadastrado.</p>';
+        }
+
+        function renderizarBloqueios() {
+            const agora = new Date();
+            const itens = agendaAtual.indisponibilidades.filter(item => new Date(item.fim) >= agora);
+            document.getElementById('lista-bloqueios').innerHTML = itens.map(item => {
+                const global = item.medico_id === null;
+                const podeRemover = sessao.role === 'admin' || !global;
+                return `<article class="border border-amber-100 bg-amber-50 rounded-xl p-4"><div class="flex justify-between gap-3"><div><span class="text-xs font-bold uppercase text-amber-800">${global ? 'Feriado global' : escapeHTML(item.tipo)}</span><strong class="block text-gray-800 mt-1">${escapeHTML(item.motivo)}</strong><p class="text-xs text-gray-600 mt-1">${new Date(item.inicio).toLocaleString('pt-BR')} — ${new Date(item.fim).toLocaleString('pt-BR')}</p></div>${podeRemover ? `<button onclick="removerBloqueio(${item.id})" class="text-xs font-bold text-red-600 self-start">Remover</button>` : ''}</div></article>`;
+            }).join('') || '<p class="text-sm text-gray-500">Nenhuma indisponibilidade futura.</p>';
+        }
+
+        async function carregarAgenda() {
+            const id = Number(document.getElementById('seletor-medico').value);
+            if (!id) return;
+            medicoAtual = id;
+            agendaAtual = await api(`/medicos/${id}/agenda`);
+            faixasPorDia = Object.fromEntries(NOMES_DIAS.map((_, indice) => [indice, []]));
+            agendaAtual.disponibilidades.forEach(item => faixasPorDia[item.dia_semana].push({hora_inicio: item.hora_inicio, hora_fim: item.hora_fim}));
+            document.getElementById('permite-cancelamento').checked = agendaAtual.permite_cancelamento_paciente;
+            document.getElementById('antecedencia-cancelamento').value = agendaAtual.antecedencia_cancelamento_horas;
+            renderizarDias(); renderizarTipos(); renderizarBloqueios();
+        }
+
+        async function iniciar() {
+            sessao = await obterSessao();
+            if (!sessao || !['admin', 'medico'].includes(sessao.role)) return window.location.replace('login.html');
+            document.getElementById('voltar-portal').href = sessao.role === 'medico' ? 'medico.html' : 'index.html';
+            document.getElementById('campo-feriado-global').classList.toggle('hidden', sessao.role !== 'admin');
+            const medicos = await api('/medicos/');
+            const seletor = document.getElementById('seletor-medico');
+            seletor.innerHTML = medicos.map(item => `<option value="${item.id}">${escapeHTML(item.nome)} · ${escapeHTML(item.crm)}</option>`).join('');
+            document.getElementById('seletor-medico-container').classList.toggle('hidden', sessao.role === 'medico');
+            document.getElementById('conteudo-agenda').classList.toggle('hidden', medicos.length === 0);
+            document.getElementById('estado-vazio').classList.toggle('hidden', medicos.length !== 0);
+            if (medicos.length) await carregarAgenda();
+        }
+
+        document.getElementById('seletor-medico').addEventListener('change', () => carregarAgenda().catch(error => alert(error.message)));
+        document.getElementById('tipo-retorno').addEventListener('change', event => document.getElementById('campo-prazo-retorno').classList.toggle('hidden', !event.target.checked));
+        document.getElementById('cancelar-edicao-tipo').addEventListener('click', limparFormTipo);
+        document.getElementById('salvar-disponibilidade').addEventListener('click', async () => {
+            try {
+                const faixas = Object.entries(faixasPorDia).flatMap(([dia, itens]) => itens.map(item => ({dia_semana: Number(dia), ...item})));
+                await api(`/medicos/${medicoAtual}/disponibilidades`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(faixas)});
+                mostrarSucesso('Disponibilidade semanal atualizada.'); await carregarAgenda();
+            } catch (error) { alert(error.message); }
+        });
+        document.getElementById('form-regras').addEventListener('submit', async event => {
+            event.preventDefault();
+            try {
+                await api(`/medicos/${medicoAtual}/regras-agenda`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({permite_cancelamento_paciente: document.getElementById('permite-cancelamento').checked, antecedencia_cancelamento_horas: Number(document.getElementById('antecedencia-cancelamento').value)})});
+                mostrarSucesso('Política de cancelamento atualizada.'); await carregarAgenda();
+            } catch (error) { alert(error.message); }
+        });
+        document.getElementById('form-tipo').addEventListener('submit', async event => {
+            event.preventDefault();
+            const id = document.getElementById('tipo-id').value;
+            const eRetorno = document.getElementById('tipo-retorno').checked;
+            const payload = {nome: document.getElementById('tipo-nome').value.trim(), duracao_minutos: Number(document.getElementById('tipo-duracao').value), intervalo_minutos: Number(document.getElementById('tipo-intervalo').value), e_retorno: eRetorno, prazo_retorno_dias: eRetorno ? Number(document.getElementById('tipo-prazo').value) : null};
+            try {
+                await api(id ? `/tipos-consulta/${id}` : `/medicos/${medicoAtual}/tipos-consulta`, {method: id ? 'PATCH' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+                mostrarSucesso(id ? 'Tipo de consulta atualizado.' : 'Tipo de consulta criado.'); limparFormTipo(); await carregarAgenda();
+            } catch (error) { alert(error.message); }
+        });
+        window.alternarTipo = async (id, ativo) => { try { await api(`/tipos-consulta/${id}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ativo})}); await carregarAgenda(); } catch (error) { alert(error.message); } };
+        document.getElementById('form-bloqueio').addEventListener('submit', async event => {
+            event.preventDefault();
+            const global = sessao.role === 'admin' && document.getElementById('feriado-global').checked;
+            const payload = {medico_id: global ? null : medicoAtual, tipo: document.getElementById('bloqueio-tipo').value, inicio: document.getElementById('bloqueio-inicio').value, fim: document.getElementById('bloqueio-fim').value, motivo: document.getElementById('bloqueio-motivo').value.trim()};
+            try { await api('/agenda/indisponibilidades', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)}); mostrarSucesso('Indisponibilidade adicionada.'); event.target.reset(); await carregarAgenda(); } catch (error) { alert(error.message); }
+        });
+        window.removerBloqueio = async id => { if (!confirm('Remover esta indisponibilidade?')) return; try { await api(`/agenda/indisponibilidades/${id}`, {method: 'DELETE'}); await carregarAgenda(); } catch (error) { alert(error.message); } };
+        iniciar().catch(error => alert(error.message));
+    </script>
+</body>
+</html>

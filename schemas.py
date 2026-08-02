@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -317,15 +317,168 @@ class MedicoUpdate(BaseModel):
     crm: Optional[str] = None
 
 
+class DisponibilidadeAgendaCreate(BaseModel):
+    dia_semana: int = Field(ge=0, le=6)
+    hora_inicio: time
+    hora_fim: time
+
+
+class DisponibilidadeAgendaResponse(DisponibilidadeAgendaCreate):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TipoConsultaCreate(BaseModel):
+    nome: str = Field(min_length=2, max_length=100)
+    duracao_minutos: int = Field(default=30, ge=10, le=240)
+    intervalo_minutos: int = Field(default=0, ge=0, le=120)
+    e_retorno: bool = False
+    prazo_retorno_dias: Optional[int] = Field(default=None, ge=1, le=365)
+
+    @field_validator("nome")
+    @classmethod
+    def normalizar_nome(cls, value: str) -> str:
+        return value.strip()
+
+
+class TipoConsultaUpdate(BaseModel):
+    nome: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    duracao_minutos: Optional[int] = Field(default=None, ge=10, le=240)
+    intervalo_minutos: Optional[int] = Field(default=None, ge=0, le=120)
+    e_retorno: Optional[bool] = None
+    prazo_retorno_dias: Optional[int] = Field(default=None, ge=1, le=365)
+    ativo: Optional[bool] = None
+
+    @field_validator("nome")
+    @classmethod
+    def normalizar_nome(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() if value is not None else value
+
+
+class TipoConsultaResponse(TipoConsultaCreate):
+    id: int
+    medico_id: int
+    ativo: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RegrasAgendaUpdate(BaseModel):
+    permite_cancelamento_paciente: bool
+    antecedencia_cancelamento_horas: int = Field(ge=0, le=720)
+
+
+class IndisponibilidadeAgendaCreate(BaseModel):
+    medico_id: Optional[int] = None
+    tipo: str
+    inicio: datetime
+    fim: datetime
+    motivo: str = Field(min_length=2, max_length=300)
+
+    @field_validator("tipo")
+    @classmethod
+    def validar_tipo(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"ferias", "feriado", "bloqueio"}:
+            raise ValueError("Tipo de indisponibilidade inválido.")
+        return value
+
+    @field_validator("motivo")
+    @classmethod
+    def normalizar_motivo(cls, value: str) -> str:
+        return value.strip()
+
+
+class IndisponibilidadeAgendaResponse(IndisponibilidadeAgendaCreate):
+    id: int
+    criado_em: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AgendaProfissionalResponse(BaseModel):
+    medico_id: int
+    permite_cancelamento_paciente: bool
+    antecedencia_cancelamento_horas: int
+    disponibilidades: list[DisponibilidadeAgendaResponse]
+    tipos_consulta: list[TipoConsultaResponse]
+    indisponibilidades: list[IndisponibilidadeAgendaResponse]
+
+
+class ConfiguracaoComunicacaoUpdate(BaseModel):
+    email_ativo: bool = False
+    email_remetente_nome: str = Field(min_length=2, max_length=160)
+    email_remetente: Optional[EmailStr] = None
+    email_responder_para: Optional[EmailStr] = None
+    whatsapp_ativo: bool = False
+    whatsapp_phone_number_id: Optional[str] = Field(default=None, min_length=5, max_length=80, pattern=r"^[0-9]+$")
+    whatsapp_numero_exibicao: Optional[str] = Field(default=None, min_length=10, max_length=30)
+    whatsapp_codigo_pais: str = Field(default="55", min_length=1, max_length=3, pattern=r"^[0-9]+$")
+    whatsapp_template_confirmacao: str = Field(
+        default="confirmacao_consulta", min_length=1, max_length=100, pattern=r"^[a-z0-9_]+$"
+    )
+    whatsapp_template_lembrete: str = Field(
+        default="lembrete_consulta", min_length=1, max_length=100, pattern=r"^[a-z0-9_]+$"
+    )
+    whatsapp_template_cancelamento: str = Field(
+        default="cancelamento_consulta", min_length=1, max_length=100, pattern=r"^[a-z0-9_]+$"
+    )
+    whatsapp_idioma: str = Field(default="pt_BR", min_length=2, max_length=12, pattern=r"^[a-z]{2}(?:_[A-Z]{2})?$")
+    enviar_confirmacoes: bool = True
+    enviar_lembretes: bool = True
+    enviar_cancelamentos: bool = True
+    lembrete_antecedencia_horas: int = Field(default=24, ge=1, le=168)
+
+
+class ConfiguracaoComunicacaoResponse(ConfiguracaoComunicacaoUpdate):
+    id: int
+    clinica_id: int
+    smtp_disponivel: bool
+    whatsapp_api_disponivel: bool
+    atualizado_em: datetime
+
+
+class ComunicacaoResponse(BaseModel):
+    id: int
+    agendamento_id: Optional[int] = None
+    paciente_id: Optional[int] = None
+    canal: str
+    evento: str
+    destinatario_resumo: Optional[str] = None
+    status: str
+    tentativas: int
+    provedor_mensagem_id: Optional[str] = None
+    ultimo_erro: Optional[str] = None
+    criado_em: datetime
+    ultima_tentativa_em: datetime
+    enviado_em: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProcessamentoComunicacaoResponse(BaseModel):
+    agendamentos_processados: int
+    envios_realizados: int
+    envios_com_falha: int
+
+
 class AgendamentoCreate(BaseModel):
     medico_id: int
     paciente_id: int
     data_hora: datetime
+    tipo_consulta_id: Optional[int] = None
+    retorno_de_agendamento_id: Optional[int] = None
 
 
 class AgendamentoResponse(AgendamentoCreate):
     id: int
     status: str
+    tipo_consulta_nome: str
+    duracao_minutos: int
+    intervalo_minutos: int
+    cancelado_em: Optional[datetime] = None
+    motivo_cancelamento: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

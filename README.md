@@ -46,7 +46,7 @@ Ao aplicar a migration multiempresa sobre uma instalação existente, todos os d
 
 ## Recuperação de senha
 
-O link “Esqueceu sua senha?” cria um token temporário e de uso único. Em desenvolvimento, o link aparece no terminal da API. Em produção, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` e `SMTP_FROM` para enviá-lo por e-mail.
+O link “Esqueceu sua senha?” cria um token temporário e de uso único. Em desenvolvimento, o link aparece no terminal da API. Em produção, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS` e `SMTP_USE_SSL` para enviá-lo por e-mail.
 
 Uma redefinição de senha revoga imediatamente todas as sessões ativas do usuário.
 
@@ -95,6 +95,24 @@ Prescrições e cancelamentos são eventos imutáveis assinados internamente. Es
 
 Consultas de prontuário por médicos e administradores exigem `motivo_acesso` (`assistencia_direta`, `assistencia_indireta`, `ensino_pesquisa` ou `judicial`) e geram auditoria por paciente consultado. O titular acessa o próprio prontuário com motivo automático `titular`.
 
+## Agenda profissional
+
+Os horários não são mais definidos por constantes no código. Cada médico possui faixas semanais independentes, com múltiplos períodos por dia para representar almoço e outros intervalos. Administradores e médicos configuram a agenda em `/agenda-config.html`.
+
+Tipos de consulta possuem nome, duração e intervalo posterior próprios. O agendamento preserva esses valores como um snapshot histórico, portanto uma alteração futura no tipo não muda consultas já marcadas. Tipos de retorno exigem uma consulta atendida do mesmo paciente e médico, respeitam o prazo configurado e impedem retornos ativos duplicados para a mesma origem.
+
+Férias e bloqueios podem ser individuais; feriados também podem abranger toda a clínica. O sistema recusa um novo bloqueio que colida com consultas ativas, e os horários disponíveis descontam automaticamente consultas, intervalos, férias, feriados e bloqueios. A política individual do médico define se o paciente pode cancelar online e qual é a antecedência mínima. Cancelamentos registram autor, momento e motivo na consulta e na auditoria.
+
+## Comunicação transacional
+
+Administradores configuram os canais da clínica em `/comunicacao-config.html`. Confirmações são enfileiradas após a criação da consulta, cancelamentos após a atualização de status e lembretes são processados automaticamente dentro da antecedência definida. O histórico registra canal, evento, destinatário mascarado, tentativas, identificador do provedor e erro seguro. A restrição única por consulta, canal e evento torna o processamento idempotente mesmo após reinicializações.
+
+O e-mail usa SMTP com `STARTTLS` ou SSL e também atende a recuperação de senha. Credenciais são exclusivamente variáveis de ambiente; remetente e `Reply-To` podem variar por clínica. Configure `COMMUNICATION_WORKER_ENABLED=true` em somente um processo e ajuste `COMMUNICATION_WORKER_INTERVAL_SECONDS` quando usar o processador interno.
+
+O WhatsApp usa a Cloud API oficial da Meta, nunca automação do WhatsApp Web. `WHATSAPP_ACCESS_TOKEN` fica no ambiente, enquanto cada clínica configura seu `phone_number_id`, número de exibição, código de país, idioma e nomes dos modelos previamente aprovados. Os modelos de confirmação e lembrete recebem seis parâmetros — paciente, clínica, tipo, médico, data e hora — e o modelo de cancelamento recebe também o motivo. A versão da Graph API é controlada por `WHATSAPP_API_VERSION` para permitir atualização sem alterar o código.
+
+No plano gratuito do Render, as portas SMTP 25, 465 e 587 são bloqueadas. Use um provedor que ofereça uma porta alternativa compatível, como 2525, ou migre o serviço para um plano pago antes de ativar e-mail em produção.
+
 ## Testes
 
 ```bash
@@ -102,7 +120,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-A suíte usa SQLite isolado e cobre cookies HttpOnly, CSRF, rotação e replay de refresh token, revogação, TOTP, códigos de recuperação, autorização, reset de senha, conflito de agenda, privacidade médico–paciente, avaliações, isolamento entre clínicas, assinatura e versionamento de prontuário, anexos e prescrições.
+A suíte usa SQLite isolado e cobre cookies HttpOnly, CSRF, rotação e replay de refresh token, revogação, TOTP, códigos de recuperação, autorização, reset de senha, agenda semanal, intervalos, bloqueios, tipos de consulta, retornos, regras de cancelamento, comunicação idempotente por SMTP e WhatsApp oficial, lembretes, privacidade médico–paciente, avaliações, isolamento entre clínicas, assinatura e versionamento de prontuário, anexos e prescrições.
 
 ## Produção
 

@@ -26,6 +26,14 @@ Se o serviço `consultorio` já existe, crie primeiro um **Render Postgres** na 
 | `COOKIE_SECURE` | `true` |
 | `COOKIE_SAMESITE` | `strict` |
 | `RUN_MIGRATIONS_ON_START` | `true` |
+| `SMTP_HOST` | host do provedor transacional |
+| `SMTP_PORT` | porta alternativa do provedor no plano gratuito, por exemplo `2525` |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | credenciais SMTP |
+| `SMTP_FROM` | remetente verificado pelo provedor |
+| `SMTP_USE_TLS` | `true` para STARTTLS |
+| `WHATSAPP_ACCESS_TOKEN` | token permanente protegido da Meta Business |
+| `WHATSAPP_API_VERSION` | versão suportada, por exemplo `v23.0` |
+| `COMMUNICATION_WORKER_ENABLED` | `true` em uma única instância |
 
 Não reutilize os três segredos. Depois escolha **Save, rebuild, and deploy**. Não é necessário cadastrar `PORT`, `ALLOWED_ORIGINS` nem `RESET_URL` no Render.
 
@@ -38,7 +46,8 @@ A configuração gratuita é adequada apenas para demonstração:
 - o Web Service adormece após inatividade e a primeira abertura pode demorar cerca de um minuto;
 - o filesystem é efêmero, portanto anexos enviados ao prontuário desaparecem em reinícios e novos deploys;
 - o PostgreSQL gratuito expira após 30 dias, tem 1 GB e não possui backup;
-- as portas SMTP comuns `25`, `465` e `587` são bloqueadas, então a recuperação de senha por e-mail exige um provedor que ofereça outra porta compatível ou uma futura integração por API HTTP.
+- as portas SMTP comuns `25`, `465` e `587` são bloqueadas, então recuperação, confirmações, lembretes e cancelamentos por e-mail exigem um provedor que ofereça outra porta compatível, como `2525`, ou um Web Service pago;
+- o worker interno de lembretes depende de a instância estar acordada; o plano gratuito pode atrasar lembretes após períodos de inatividade e serve apenas para demonstração.
 
 Antes de atender clientes reais, migre para Web Service e PostgreSQL pagos, armazenamento de objetos privado para anexos, SMTP/transacional funcional, backup testado, monitoramento e ambientes separados. O guia de produção continua sendo [PRODUCTION.md](PRODUCTION.md).
 

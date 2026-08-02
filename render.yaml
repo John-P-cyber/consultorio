@@ -31,6 +31,26 @@ services:
         value: strict
       - key: RUN_MIGRATIONS_ON_START
         value: "true"
+      - key: COMMUNICATION_WORKER_ENABLED
+        value: "true"
+      - key: COMMUNICATION_WORKER_INTERVAL_SECONDS
+        value: "300"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_USE_TLS
+        value: "true"
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_API_VERSION
+        value: v23.0
 
 databases:
   - name: consultorio-db

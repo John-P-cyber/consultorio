@@ -1,19 +1,18 @@
+import asyncio
 import hmac
 import hashlib
 import json
 import math
 import secrets
-import smtplib
 from uuid import uuid4
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, date, datetime, timedelta
-from email.message import EmailMessage
 from pathlib import Path
 from typing import Callable, List
 from urllib.parse import urlencode
 
 import jwt
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
@@ -26,6 +25,14 @@ from sqlalchemy.orm import Session
 
 import models
 import schemas
+from communication_service import (
+    FalhaNoProvedor,
+    ProvedorNaoConfigurado,
+    enviar_email,
+    enviar_template_whatsapp,
+    smtp_disponivel,
+    whatsapp_disponivel,
+)
 from auth_service import (
     gerar_codigo_totp,
     gerar_codigos_recuperacao,
@@ -43,6 +50,8 @@ from config import (
     ALLOWED_ORIGINS,
     APP_ENV,
     CLINIC_PROVISIONING_TOKEN,
+    COMMUNICATION_WORKER_ENABLED,
+    COMMUNICATION_WORKER_INTERVAL_SECONDS,
     COOKIE_SAMESITE,
     COOKIE_SECURE,
     CSRF_COOKIE_NAME,
@@ -61,11 +70,6 @@ from config import (
     RESET_URL,
     SECRET_KEY,
     SESSION_MAX_ACTIVE,
-    SMTP_FROM,
-    SMTP_HOST,
-    SMTP_PASSWORD,
-    SMTP_PORT,
-    SMTP_USERNAME,
     TERMOS_VERSAO,
 )
 from database import SessionLocal, engine
@@ -113,7 +117,16 @@ tentativas_login: dict[str, list[datetime]] = {}
 async def lifespan(_: FastAPI):
     if APP_ENV == "test":
         models.Base.metadata.create_all(bind=engine)
-    yield
+    tarefa_comunicacao = None
+    if COMMUNICATION_WORKER_ENABLED and APP_ENV != "test":
+        tarefa_comunicacao = asyncio.create_task(_loop_lembretes())
+    try:
+        yield
+    finally:
+        if tarefa_comunicacao:
+            tarefa_comunicacao.cancel()
+            with suppress(asyncio.CancelledError):
+                await tarefa_comunicacao
 
 
 app = FastAPI(
@@ -127,7 +140,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
 )
 
@@ -483,23 +496,24 @@ def criar_token_recuperacao(usuario: models.Usuario) -> str:
     )
 
 
-def enviar_link_recuperacao(destinatario: str, token: str) -> None:
+def enviar_link_recuperacao(destinatario: str, token: str, clinica: models.Clinica) -> None:
     link = f"{RESET_URL}?{urlencode({'token': token})}"
     if APP_ENV == "development":
         print(f"[RECUPERACAO DE SENHA] Link para {destinatario}: {link}")
         return
-    if not SMTP_HOST:
-        raise RuntimeError("SMTP_HOST deve ser configurado em produção para recuperar senhas.")
-    mensagem = EmailMessage()
-    mensagem["Subject"] = "Redefinição de senha - Clínica Saúde"
-    mensagem["From"] = SMTP_FROM
-    mensagem["To"] = destinatario
-    mensagem.set_content(f"Use este link para criar uma nova senha. Ele expira em {RESET_TOKEN_EXPIRE_MINUTES} minutos: {link}")
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as servidor:
-        servidor.starttls()
-        if SMTP_USERNAME and SMTP_PASSWORD:
-            servidor.login(SMTP_USERNAME, SMTP_PASSWORD)
-        servidor.send_message(mensagem)
+    configuracao = clinica.configuracao_comunicacao
+    enviar_email(
+        destinatario=destinatario,
+        assunto=f"Redefinição de senha - {clinica.nome}",
+        texto=(
+            f"Recebemos uma solicitação para redefinir sua senha em {clinica.nome}.\n\n"
+            f"Acesse o link abaixo em até {RESET_TOKEN_EXPIRE_MINUTES} minutos:\n{link}\n\n"
+            "Se você não solicitou a alteração, ignore esta mensagem."
+        ),
+        remetente_nome=configuracao.email_remetente_nome if configuracao else clinica.nome,
+        remetente_email=configuracao.email_remetente if configuracao else None,
+        responder_para=configuracao.email_responder_para if configuracao else None,
+    )
 
 
 def usuario_atual(
@@ -737,6 +751,13 @@ def anonimizar_dados_paciente(paciente: models.Paciente, db: Session) -> None:
     ):
         consentimento.endereco_ip = None
         consentimento.user_agent = None
+    db.query(models.Comunicacao).filter(
+        models.Comunicacao.clinica_id == paciente.clinica_id,
+        models.Comunicacao.paciente_id == paciente.id,
+    ).update({
+        models.Comunicacao.destinatario_hash: None,
+        models.Comunicacao.destinatario_resumo: "anonimizado",
+    }, synchronize_session=False)
 
 
 def excluir_dados_paciente(paciente: models.Paciente, db: Session) -> None:
@@ -748,6 +769,14 @@ def excluir_dados_paciente(paciente: models.Paciente, db: Session) -> None:
         anonimizar_dados_paciente(paciente, db)
         return
     usuario_id = paciente.usuario_id
+    db.query(models.Comunicacao).filter(
+        models.Comunicacao.clinica_id == paciente.clinica_id,
+        models.Comunicacao.paciente_id == paciente.id,
+    ).update({
+        models.Comunicacao.paciente_id: None,
+        models.Comunicacao.destinatario_hash: None,
+        models.Comunicacao.destinatario_resumo: "excluído",
+    }, synchronize_session=False)
     db.query(models.Avaliacao).filter(
         models.Avaliacao.clinica_id == paciente.clinica_id,
         models.Avaliacao.paciente_id == paciente.id,
@@ -793,15 +822,434 @@ def calcular_distancia(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     return raio_terra * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def horarios_do_dia(medico: models.Medico, dia) -> list[datetime]:
+def criar_agenda_padrao(db: Session, medico: models.Medico) -> None:
+    """Cria dados explícitos de agenda para um profissional recém-cadastrado."""
+    duracao = medico.duracao_consulta or 30
+    db.add_all([
+        models.TipoConsulta(
+            clinica_id=medico.clinica_id,
+            medico_id=medico.id,
+            nome="Consulta",
+            duracao_minutos=duracao,
+            intervalo_minutos=0,
+            e_retorno=False,
+            ativo=True,
+        ),
+        models.TipoConsulta(
+            clinica_id=medico.clinica_id,
+            medico_id=medico.id,
+            nome="Retorno",
+            duracao_minutos=duracao,
+            intervalo_minutos=0,
+            e_retorno=True,
+            prazo_retorno_dias=30,
+            ativo=True,
+        ),
+    ])
+    for dia_semana in range(5):
+        for hora_inicio, hora_fim in ((8, 12), (13, 18)):
+            db.add(models.DisponibilidadeAgenda(
+                clinica_id=medico.clinica_id,
+                medico_id=medico.id,
+                dia_semana=dia_semana,
+                hora_inicio=datetime.min.time().replace(hour=hora_inicio),
+                hora_fim=datetime.min.time().replace(hour=hora_fim),
+            ))
+
+
+def medico_para_agenda(medico_id: int, usuario: models.Usuario, db: Session) -> models.Medico:
+    medico = db.query(models.Medico).filter(
+        models.Medico.id == medico_id,
+        models.Medico.clinica_id == usuario.clinica_id,
+    ).first()
+    if not medico:
+        raise HTTPException(status_code=404, detail="Médico não encontrado.")
+    return medico
+
+
+def exigir_gestao_agenda(medico: models.Medico, usuario: models.Usuario) -> None:
+    if usuario.role == "medico" and medico.usuario_id != usuario.id:
+        raise HTTPException(status_code=403, detail="Você só pode configurar a própria agenda.")
+
+
+def tipo_consulta_da_agenda(
+    db: Session,
+    medico: models.Medico,
+    tipo_consulta_id: int | None,
+    *,
+    exigir_ativo: bool = True,
+) -> models.TipoConsulta:
+    consulta = db.query(models.TipoConsulta).filter(
+        models.TipoConsulta.clinica_id == medico.clinica_id,
+        models.TipoConsulta.medico_id == medico.id,
+    )
+    if tipo_consulta_id is not None:
+        consulta = consulta.filter(models.TipoConsulta.id == tipo_consulta_id)
+    else:
+        consulta = consulta.filter(models.TipoConsulta.e_retorno.is_(False)).order_by(models.TipoConsulta.id)
+    if exigir_ativo:
+        consulta = consulta.filter(models.TipoConsulta.ativo.is_(True))
+    tipo = consulta.first()
+    if not tipo:
+        raise HTTPException(status_code=404, detail="Tipo de consulta não encontrado ou inativo.")
+    return tipo
+
+
+def intervalos_sobrepostos(inicio_a: datetime, fim_a: datetime, inicio_b: datetime, fim_b: datetime) -> bool:
+    return inicio_a < fim_b and inicio_b < fim_a
+
+
+def horarios_do_dia(
+    db: Session,
+    medico: models.Medico,
+    dia: date,
+    tipo_consulta: models.TipoConsulta,
+) -> list[datetime]:
+    faixas = db.query(models.DisponibilidadeAgenda).filter(
+        models.DisponibilidadeAgenda.clinica_id == medico.clinica_id,
+        models.DisponibilidadeAgenda.medico_id == medico.id,
+        models.DisponibilidadeAgenda.dia_semana == dia.weekday(),
+    ).order_by(models.DisponibilidadeAgenda.hora_inicio).all()
     horarios: list[datetime] = []
-    for inicio, fim in ((8, 12), (13, 18)):
-        horario = datetime.combine(dia, datetime.min.time().replace(hour=inicio))
-        limite = datetime.combine(dia, datetime.min.time().replace(hour=fim))
-        while horario + timedelta(minutes=medico.duracao_consulta) <= limite:
+    passo = timedelta(minutes=tipo_consulta.duracao_minutos + tipo_consulta.intervalo_minutos)
+    duracao = timedelta(minutes=tipo_consulta.duracao_minutos)
+    for faixa in faixas:
+        horario = datetime.combine(dia, faixa.hora_inicio)
+        limite = datetime.combine(dia, faixa.hora_fim)
+        while horario + duracao <= limite:
             horarios.append(horario)
-            horario += timedelta(minutes=medico.duracao_consulta)
+            horario += passo
     return horarios
+
+
+def bloqueios_do_dia(db: Session, medico: models.Medico, dia: date) -> list[models.IndisponibilidadeAgenda]:
+    inicio_dia = datetime.combine(dia, datetime.min.time())
+    fim_dia = inicio_dia + timedelta(days=1)
+    return db.query(models.IndisponibilidadeAgenda).filter(
+        models.IndisponibilidadeAgenda.clinica_id == medico.clinica_id,
+        (
+            models.IndisponibilidadeAgenda.medico_id.is_(None)
+            | (models.IndisponibilidadeAgenda.medico_id == medico.id)
+        ),
+        models.IndisponibilidadeAgenda.inicio < fim_dia,
+        models.IndisponibilidadeAgenda.fim > inicio_dia,
+    ).all()
+
+
+def agendamentos_do_dia(db: Session, medico: models.Medico, dia: date) -> list[models.Agendamento]:
+    inicio_dia = datetime.combine(dia, datetime.min.time())
+    fim_dia = inicio_dia + timedelta(days=1)
+    return db.query(models.Agendamento).filter(
+        models.Agendamento.clinica_id == medico.clinica_id,
+        models.Agendamento.medico_id == medico.id,
+        models.Agendamento.data_hora >= inicio_dia,
+        models.Agendamento.data_hora < fim_dia,
+        models.Agendamento.status != "Cancelado",
+    ).all()
+
+
+def horario_tem_conflito(
+    inicio: datetime,
+    duracao_minutos: int,
+    intervalo_minutos: int,
+    agendamentos: list[models.Agendamento],
+    bloqueios: list[models.IndisponibilidadeAgenda],
+) -> bool:
+    fim = inicio + timedelta(minutes=duracao_minutos + intervalo_minutos)
+    if any(intervalos_sobrepostos(inicio, fim, bloqueio.inicio, bloqueio.fim) for bloqueio in bloqueios):
+        return True
+    for existente in agendamentos:
+        fim_existente = existente.data_hora + timedelta(
+            minutes=existente.duracao_minutos + existente.intervalo_minutos
+        )
+        if intervalos_sobrepostos(inicio, fim, existente.data_hora, fim_existente):
+            return True
+    return False
+
+
+def obter_configuracao_comunicacao(db: Session, clinica_id: int) -> models.ConfiguracaoComunicacao:
+    configuracao = db.query(models.ConfiguracaoComunicacao).filter(
+        models.ConfiguracaoComunicacao.clinica_id == clinica_id
+    ).first()
+    if configuracao:
+        return configuracao
+    clinica = db.query(models.Clinica).filter(models.Clinica.id == clinica_id).first()
+    if not clinica:
+        raise ValueError("Clínica não encontrada para configurar comunicações.")
+    configuracao = models.ConfiguracaoComunicacao(
+        clinica_id=clinica.id,
+        email_ativo=False,
+        email_remetente_nome=clinica.nome,
+        whatsapp_ativo=False,
+        atualizado_em=_agora_utc(),
+    )
+    db.add(configuracao)
+    db.flush()
+    return configuracao
+
+
+def resposta_configuracao_comunicacao(
+    configuracao: models.ConfiguracaoComunicacao,
+) -> schemas.ConfiguracaoComunicacaoResponse:
+    dados = {
+        coluna.name: getattr(configuracao, coluna.name)
+        for coluna in models.ConfiguracaoComunicacao.__table__.columns
+    }
+    dados.update({
+        "smtp_disponivel": smtp_disponivel(),
+        "whatsapp_api_disponivel": whatsapp_disponivel(),
+    })
+    return schemas.ConfiguracaoComunicacaoResponse.model_validate(dados)
+
+
+def resumo_destinatario(canal: str, destinatario: str) -> str:
+    if canal == "email" and "@" in destinatario:
+        usuario, dominio = destinatario.split("@", 1)
+        prefixo = usuario[:2] if len(usuario) > 1 else "*"
+        return f"{prefixo}***@{dominio}"[:40]
+    digitos = "".join(caractere for caractere in destinatario if caractere.isdigit())
+    return f"***{digitos[-4:]}" if digitos else "não informado"
+
+
+def conteudo_comunicacao(
+    agendamento: models.Agendamento,
+    evento: str,
+) -> tuple[str, str, list[str]]:
+    paciente = agendamento.paciente
+    medico = agendamento.medico
+    clinica = agendamento.clinica
+    data = agendamento.data_hora.strftime("%d/%m/%Y")
+    horario = agendamento.data_hora.strftime("%H:%M")
+    tipo = agendamento.tipo_consulta_nome
+    saudacao = paciente.nome.split()[0] if paciente.nome.strip() else "Paciente"
+    base = [saudacao, clinica.nome, tipo, medico.nome, data, horario]
+    if evento == "confirmacao":
+        assunto = f"Consulta confirmada - {clinica.nome}"
+        texto = (
+            f"Olá, {saudacao}. Sua consulta de {tipo} com {medico.nome} foi confirmada "
+            f"para {data} às {horario}."
+        )
+    elif evento == "lembrete":
+        assunto = f"Lembrete de consulta - {clinica.nome}"
+        texto = (
+            f"Olá, {saudacao}. Lembramos que sua consulta de {tipo} com {medico.nome} "
+            f"será em {data} às {horario}."
+        )
+    elif evento == "cancelamento":
+        motivo = agendamento.motivo_cancelamento or "Cancelamento registrado pela clínica"
+        assunto = f"Consulta cancelada - {clinica.nome}"
+        texto = (
+            f"Olá, {saudacao}. Sua consulta de {tipo} com {medico.nome}, marcada para "
+            f"{data} às {horario}, foi cancelada. Motivo: {motivo}."
+        )
+        base.append(motivo)
+    else:
+        raise ValueError("Evento de comunicação inválido.")
+    texto += f"\n\nEm caso de dúvida, entre em contato com {clinica.nome}."
+    return assunto, texto, base
+
+
+def registrar_tentativa_comunicacao(
+    db: Session,
+    agendamento: models.Agendamento,
+    canal: str,
+    evento: str,
+    destinatario: str,
+) -> models.Comunicacao | None:
+    registro = db.query(models.Comunicacao).filter(
+        models.Comunicacao.clinica_id == agendamento.clinica_id,
+        models.Comunicacao.agendamento_id == agendamento.id,
+        models.Comunicacao.canal == canal,
+        models.Comunicacao.evento == evento,
+    ).first()
+    if registro and (registro.status in {"enviado", "ignorado"} or registro.tentativas >= 3):
+        return None
+    agora = _agora_utc()
+    if registro and registro.status == "pendente" and _como_utc(registro.ultima_tentativa_em) > agora - timedelta(minutes=10):
+        return None
+    if not registro:
+        registro = models.Comunicacao(
+            clinica_id=agendamento.clinica_id,
+            agendamento_id=agendamento.id,
+            paciente_id=agendamento.paciente_id,
+            canal=canal,
+            evento=evento,
+            status="pendente",
+            tentativas=0,
+            criado_em=agora,
+            ultima_tentativa_em=agora,
+        )
+        db.add(registro)
+    registro.destinatario_hash = hash_contexto(f"comunicacao:{canal}", destinatario)
+    registro.destinatario_resumo = resumo_destinatario(canal, destinatario)
+    registro.status = "pendente"
+    registro.tentativas += 1
+    registro.ultima_tentativa_em = agora
+    registro.ultimo_erro = None
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return None
+    db.refresh(registro)
+    return registro
+
+
+def processar_comunicacoes_agendamento(agendamento_id: int, evento: str) -> tuple[int, int]:
+    """Processa canais habilitados sem deixar falha externa afetar a consulta."""
+    db = SessionLocal()
+    enviados = 0
+    falhas = 0
+    try:
+        agendamento = db.query(models.Agendamento).filter(models.Agendamento.id == agendamento_id).first()
+        if not agendamento:
+            return 0, 0
+        configuracao = obter_configuracao_comunicacao(db, agendamento.clinica_id)
+        evento_ativo = {
+            "confirmacao": configuracao.enviar_confirmacoes,
+            "lembrete": configuracao.enviar_lembretes,
+            "cancelamento": configuracao.enviar_cancelamentos,
+        }.get(evento, False)
+        if not evento_ativo:
+            return 0, 0
+
+        assunto, texto, parametros = conteudo_comunicacao(agendamento, evento)
+        canais: list[tuple[str, str]] = []
+        if configuracao.email_ativo:
+            canais.append(("email", agendamento.paciente.email or ""))
+        if configuracao.whatsapp_ativo:
+            canais.append(("whatsapp", agendamento.paciente.telefone or ""))
+
+        for canal, destinatario in canais:
+            if not destinatario:
+                continue
+            registro = registrar_tentativa_comunicacao(db, agendamento, canal, evento, destinatario)
+            if not registro:
+                continue
+            try:
+                if canal == "email":
+                    resultado = enviar_email(
+                        destinatario=destinatario,
+                        assunto=assunto,
+                        texto=texto,
+                        remetente_nome=configuracao.email_remetente_nome,
+                        remetente_email=configuracao.email_remetente,
+                        responder_para=configuracao.email_responder_para,
+                    )
+                else:
+                    template = {
+                        "confirmacao": configuracao.whatsapp_template_confirmacao,
+                        "lembrete": configuracao.whatsapp_template_lembrete,
+                        "cancelamento": configuracao.whatsapp_template_cancelamento,
+                    }[evento]
+                    resultado = enviar_template_whatsapp(
+                        phone_number_id=configuracao.whatsapp_phone_number_id or "",
+                        destinatario=destinatario,
+                        template=template,
+                        idioma=configuracao.whatsapp_idioma,
+                        parametros=parametros,
+                        codigo_pais=configuracao.whatsapp_codigo_pais,
+                    )
+                registro.status = "enviado"
+                registro.provedor_mensagem_id = resultado.identificador
+                registro.enviado_em = _agora_utc()
+                enviados += 1
+            except (ProvedorNaoConfigurado, FalhaNoProvedor, ValueError) as exc:
+                registro.status = "falhou"
+                registro.ultimo_erro = str(exc)[:300]
+                falhas += 1
+                logger.warning(
+                    "communication_delivery_failed",
+                    extra={
+                        "event": "communication_delivery_failed",
+                        "clinic_id": agendamento.clinica_id,
+                        "appointment_id": agendamento.id,
+                        "channel": canal,
+                        "communication_event": evento,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+            db.commit()
+        return enviados, falhas
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "communication_processing_failed",
+            extra={"event": "communication_processing_failed", "appointment_id": agendamento_id},
+        )
+        return enviados, falhas + 1
+    finally:
+        db.close()
+
+
+def processar_lembretes_pendentes(clinica_id: int | None = None) -> tuple[int, int, int]:
+    db = SessionLocal()
+    processados = 0
+    enviados = 0
+    falhas = 0
+    try:
+        consulta = db.query(models.ConfiguracaoComunicacao).filter(
+            models.ConfiguracaoComunicacao.enviar_lembretes.is_(True),
+            (
+                models.ConfiguracaoComunicacao.email_ativo.is_(True)
+                | models.ConfiguracaoComunicacao.whatsapp_ativo.is_(True)
+            ),
+        )
+        if clinica_id is not None:
+            consulta = consulta.filter(models.ConfiguracaoComunicacao.clinica_id == clinica_id)
+        configuracoes = consulta.all()
+        agora = datetime.now()
+        for configuracao in configuracoes:
+            limite = agora + timedelta(hours=configuracao.lembrete_antecedencia_horas)
+            ids = [valor for (valor,) in db.query(models.Agendamento.id).filter(
+                models.Agendamento.clinica_id == configuracao.clinica_id,
+                models.Agendamento.status == "Confirmado",
+                models.Agendamento.data_hora > agora,
+                models.Agendamento.data_hora <= limite,
+            ).all()]
+            for agendamento_id in ids:
+                processados += 1
+                enviados_evento, falhas_evento = processar_comunicacoes_agendamento(agendamento_id, "lembrete")
+                enviados += enviados_evento
+                falhas += falhas_evento
+        return processados, enviados, falhas
+    finally:
+        db.close()
+
+
+def reprocessar_comunicacoes_com_falha() -> tuple[int, int]:
+    db = SessionLocal()
+    try:
+        pendentes = db.query(
+            models.Comunicacao.agendamento_id,
+            models.Comunicacao.evento,
+        ).filter(
+            models.Comunicacao.agendamento_id.is_not(None),
+            models.Comunicacao.status.in_({"falhou", "pendente"}),
+            models.Comunicacao.tentativas < 3,
+            models.Comunicacao.ultima_tentativa_em <= (
+                _agora_utc() - timedelta(seconds=COMMUNICATION_WORKER_INTERVAL_SECONDS)
+            ),
+        ).distinct().all()
+    finally:
+        db.close()
+    enviados = 0
+    falhas = 0
+    for agendamento_id, evento in pendentes:
+        enviados_evento, falhas_evento = processar_comunicacoes_agendamento(agendamento_id, evento)
+        enviados += enviados_evento
+        falhas += falhas_evento
+    return enviados, falhas
+
+
+async def _loop_lembretes() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(processar_lembretes_pendentes)
+            await asyncio.to_thread(reprocessar_comunicacoes_com_falha)
+        except Exception:
+            logger.exception("communication_worker_failed", extra={"event": "communication_worker_failed"})
+        await asyncio.sleep(COMMUNICATION_WORKER_INTERVAL_SECONDS)
 
 
 @app.get("/", include_in_schema=False)
@@ -903,7 +1351,11 @@ def criar_medico(medico: schemas.MedicoCreate, db: Session = Depends(get_db), us
     ).first():
         raise HTTPException(status_code=400, detail="CRM ou e-mail já cadastrado.")
     novo = models.Medico(clinica_id=usuario.clinica_id, **medico.model_dump())
-    db.add(novo); commit_ou_conflito(db, "CRM ou e-mail já cadastrado."); db.refresh(novo)
+    db.add(novo)
+    flush_ou_conflito(db, "CRM ou e-mail já cadastrado.")
+    criar_agenda_padrao(db, novo)
+    commit_ou_conflito(db, "CRM, e-mail ou configuração de agenda já cadastrados.")
+    db.refresh(novo)
     return novo
 
 
@@ -938,26 +1390,386 @@ def recomendar_medicos(latitude_paciente: float, longitude_paciente: float, db: 
     return [{"id": medico.id, "nome": medico.nome, "especialidade": medico.especialidade, "crm": medico.crm, "avaliacao_media": medico.avaliacao_media, "distancia_km": round(distancia, 2), "morada": f"{medico.endereco_rua}, {medico.endereco_numero} - {medico.endereco_bairro}"} for medico, distancia in ordenados]
 
 
+@app.get("/medicos/{medico_id}/tipos-consulta", response_model=List[schemas.TipoConsultaResponse])
+def listar_tipos_consulta(
+    medico_id: int,
+    incluir_inativos: bool = False,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico")),
+):
+    medico = medico_para_agenda(medico_id, usuario, db)
+    consulta = db.query(models.TipoConsulta).filter(
+        models.TipoConsulta.clinica_id == usuario.clinica_id,
+        models.TipoConsulta.medico_id == medico.id,
+    )
+    if usuario.role == "paciente" or not incluir_inativos:
+        consulta = consulta.filter(models.TipoConsulta.ativo.is_(True))
+    return consulta.order_by(models.TipoConsulta.e_retorno, models.TipoConsulta.nome).all()
+
+
+@app.get("/medicos/{medico_id}/agenda", response_model=schemas.AgendaProfissionalResponse)
+def obter_agenda_profissional(
+    medico_id: int,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "medico")),
+):
+    medico = medico_para_agenda(medico_id, usuario, db)
+    exigir_gestao_agenda(medico, usuario)
+    disponibilidades = db.query(models.DisponibilidadeAgenda).filter(
+        models.DisponibilidadeAgenda.clinica_id == usuario.clinica_id,
+        models.DisponibilidadeAgenda.medico_id == medico.id,
+    ).order_by(
+        models.DisponibilidadeAgenda.dia_semana,
+        models.DisponibilidadeAgenda.hora_inicio,
+    ).all()
+    tipos = db.query(models.TipoConsulta).filter(
+        models.TipoConsulta.clinica_id == usuario.clinica_id,
+        models.TipoConsulta.medico_id == medico.id,
+    ).order_by(models.TipoConsulta.e_retorno, models.TipoConsulta.nome).all()
+    indisponibilidades = db.query(models.IndisponibilidadeAgenda).filter(
+        models.IndisponibilidadeAgenda.clinica_id == usuario.clinica_id,
+        (
+            models.IndisponibilidadeAgenda.medico_id.is_(None)
+            | (models.IndisponibilidadeAgenda.medico_id == medico.id)
+        ),
+    ).order_by(models.IndisponibilidadeAgenda.inicio.desc()).all()
+    return {
+        "medico_id": medico.id,
+        "permite_cancelamento_paciente": medico.permite_cancelamento_paciente,
+        "antecedencia_cancelamento_horas": medico.antecedencia_cancelamento_horas,
+        "disponibilidades": disponibilidades,
+        "tipos_consulta": tipos,
+        "indisponibilidades": indisponibilidades,
+    }
+
+
+@app.put("/medicos/{medico_id}/disponibilidades", response_model=List[schemas.DisponibilidadeAgendaResponse])
+def substituir_disponibilidades(
+    medico_id: int,
+    faixas: List[schemas.DisponibilidadeAgendaCreate],
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "medico")),
+):
+    medico = medico_para_agenda(medico_id, usuario, db)
+    exigir_gestao_agenda(medico, usuario)
+    por_dia: dict[int, list[schemas.DisponibilidadeAgendaCreate]] = {}
+    for faixa in faixas:
+        if faixa.hora_fim <= faixa.hora_inicio:
+            raise HTTPException(status_code=400, detail="O fim de uma faixa deve ser posterior ao início.")
+        por_dia.setdefault(faixa.dia_semana, []).append(faixa)
+    for itens in por_dia.values():
+        ordenados = sorted(itens, key=lambda item: item.hora_inicio)
+        if any(atual.hora_inicio < anterior.hora_fim for anterior, atual in zip(ordenados, ordenados[1:])):
+            raise HTTPException(status_code=400, detail="Existem faixas de disponibilidade sobrepostas.")
+
+    db.query(models.DisponibilidadeAgenda).filter(
+        models.DisponibilidadeAgenda.clinica_id == usuario.clinica_id,
+        models.DisponibilidadeAgenda.medico_id == medico.id,
+    ).delete(synchronize_session=False)
+    registros = [models.DisponibilidadeAgenda(
+        clinica_id=usuario.clinica_id,
+        medico_id=medico.id,
+        **faixa.model_dump(),
+    ) for faixa in faixas]
+    db.add_all(registros)
+    registrar_auditoria(
+        db, request=request, usuario=usuario, acao="ALTERACAO", recurso="agenda_profissional",
+        registro_id=medico.id, campos=["disponibilidades"], detalhes={"faixas": len(registros)},
+    )
+    commit_ou_conflito(db, "Há faixas de disponibilidade duplicadas.")
+    for registro in registros:
+        db.refresh(registro)
+    return sorted(registros, key=lambda item: (item.dia_semana, item.hora_inicio))
+
+
+@app.patch("/medicos/{medico_id}/regras-agenda", response_model=schemas.AgendaProfissionalResponse)
+def atualizar_regras_agenda(
+    medico_id: int,
+    dados: schemas.RegrasAgendaUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "medico")),
+):
+    medico = medico_para_agenda(medico_id, usuario, db)
+    exigir_gestao_agenda(medico, usuario)
+    medico.permite_cancelamento_paciente = dados.permite_cancelamento_paciente
+    medico.antecedencia_cancelamento_horas = dados.antecedencia_cancelamento_horas
+    registrar_auditoria(
+        db, request=request, usuario=usuario, acao="ALTERACAO", recurso="agenda_profissional",
+        registro_id=medico.id,
+        campos=["permite_cancelamento_paciente", "antecedencia_cancelamento_horas"],
+    )
+    db.commit()
+    return obter_agenda_profissional(medico.id, db, usuario)
+
+
+@app.post(
+    "/medicos/{medico_id}/tipos-consulta",
+    response_model=schemas.TipoConsultaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def criar_tipo_consulta(
+    medico_id: int,
+    dados: schemas.TipoConsultaCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "medico")),
+):
+    medico = medico_para_agenda(medico_id, usuario, db)
+    exigir_gestao_agenda(medico, usuario)
+    if dados.e_retorno and dados.prazo_retorno_dias is None:
+        raise HTTPException(status_code=400, detail="Informe o prazo máximo do retorno.")
+    novo = models.TipoConsulta(
+        clinica_id=usuario.clinica_id,
+        medico_id=medico.id,
+        **dados.model_dump(),
+        ativo=True,
+    )
+    db.add(novo)
+    flush_ou_conflito(db, "Já existe um tipo de consulta com este nome.")
+    registrar_auditoria(
+        db, request=request, usuario=usuario, acao="CRIACAO", recurso="tipo_consulta",
+        registro_id=novo.id, campos=list(dados.model_fields_set),
+    )
+    db.commit()
+    db.refresh(novo)
+    return novo
+
+
+@app.patch("/tipos-consulta/{tipo_id}", response_model=schemas.TipoConsultaResponse)
+def atualizar_tipo_consulta(
+    tipo_id: int,
+    dados: schemas.TipoConsultaUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "medico")),
+):
+    tipo = db.query(models.TipoConsulta).filter(
+        models.TipoConsulta.id == tipo_id,
+        models.TipoConsulta.clinica_id == usuario.clinica_id,
+    ).first()
+    if not tipo:
+        raise HTTPException(status_code=404, detail="Tipo de consulta não encontrado.")
+    exigir_gestao_agenda(tipo.medico, usuario)
+    valores = dados.model_dump(exclude_unset=True)
+    for campo, valor in valores.items():
+        setattr(tipo, campo, valor)
+    if tipo.e_retorno and tipo.prazo_retorno_dias is None:
+        raise HTTPException(status_code=400, detail="Informe o prazo máximo do retorno.")
+    registrar_auditoria(
+        db, request=request, usuario=usuario, acao="ALTERACAO", recurso="tipo_consulta",
+        registro_id=tipo.id, campos=list(valores),
+    )
+    commit_ou_conflito(db, "Já existe um tipo de consulta com este nome.")
+    db.refresh(tipo)
+    return tipo
+
+
+@app.post(
+    "/agenda/indisponibilidades",
+    response_model=schemas.IndisponibilidadeAgendaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def criar_indisponibilidade(
+    dados: schemas.IndisponibilidadeAgendaCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "medico")),
+):
+    if dados.fim <= dados.inicio:
+        raise HTTPException(status_code=400, detail="O fim da indisponibilidade deve ser posterior ao início.")
+    medico = None
+    if dados.medico_id is not None:
+        medico = medico_para_agenda(dados.medico_id, usuario, db)
+        exigir_gestao_agenda(medico, usuario)
+    elif usuario.role != "admin":
+        raise HTTPException(status_code=403, detail="Somente administradores podem criar feriados globais.")
+
+    consulta_conflitos = db.query(models.Agendamento).filter(
+        models.Agendamento.clinica_id == usuario.clinica_id,
+        models.Agendamento.status != "Cancelado",
+        models.Agendamento.data_hora < dados.fim,
+    )
+    if medico:
+        consulta_conflitos = consulta_conflitos.filter(models.Agendamento.medico_id == medico.id)
+    conflitos = [item for item in consulta_conflitos.all() if (
+        item.data_hora + timedelta(minutes=item.duracao_minutos + item.intervalo_minutos) > dados.inicio
+    )]
+    if conflitos:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Existem {len(conflitos)} consulta(s) ativa(s) no período. Reagende ou cancele antes do bloqueio.",
+        )
+    novo = models.IndisponibilidadeAgenda(
+        clinica_id=usuario.clinica_id,
+        medico_id=medico.id if medico else None,
+        tipo=dados.tipo,
+        inicio=dados.inicio,
+        fim=dados.fim,
+        motivo=dados.motivo,
+        criado_por_usuario_id=usuario.id,
+        criado_em=_agora_utc(),
+    )
+    db.add(novo)
+    db.flush()
+    registrar_auditoria(
+        db, request=request, usuario=usuario, acao="CRIACAO", recurso="indisponibilidade_agenda",
+        registro_id=novo.id, campos=["medico_id", "tipo", "inicio", "fim", "motivo"],
+    )
+    db.commit()
+    db.refresh(novo)
+    return novo
+
+
+@app.delete("/agenda/indisponibilidades/{indisponibilidade_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remover_indisponibilidade(
+    indisponibilidade_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "medico")),
+):
+    registro = db.query(models.IndisponibilidadeAgenda).filter(
+        models.IndisponibilidadeAgenda.id == indisponibilidade_id,
+        models.IndisponibilidadeAgenda.clinica_id == usuario.clinica_id,
+    ).first()
+    if not registro:
+        raise HTTPException(status_code=404, detail="Indisponibilidade não encontrada.")
+    if usuario.role == "medico":
+        medico = medico_do_usuario(usuario, db)
+        if registro.medico_id != medico.id:
+            raise HTTPException(status_code=403, detail="Você só pode remover bloqueios da própria agenda.")
+    registrar_auditoria(
+        db, request=request, usuario=usuario, acao="EXCLUSAO", recurso="indisponibilidade_agenda",
+        registro_id=registro.id, campos=["tipo", "inicio", "fim"],
+    )
+    db.delete(registro)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.get("/comunicacoes/configuracao", response_model=schemas.ConfiguracaoComunicacaoResponse)
+def obter_configuracao_comunicacoes(
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin")),
+):
+    configuracao = obter_configuracao_comunicacao(db, usuario.clinica_id)
+    db.commit()
+    db.refresh(configuracao)
+    return resposta_configuracao_comunicacao(configuracao)
+
+
+@app.put("/comunicacoes/configuracao", response_model=schemas.ConfiguracaoComunicacaoResponse)
+def atualizar_configuracao_comunicacoes(
+    dados: schemas.ConfiguracaoComunicacaoUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin")),
+):
+    if dados.whatsapp_ativo and not dados.whatsapp_phone_number_id:
+        raise HTTPException(status_code=400, detail="Informe o identificador oficial do número do WhatsApp.")
+    if dados.whatsapp_ativo and not dados.whatsapp_numero_exibicao:
+        raise HTTPException(status_code=400, detail="Informe o número de exibição do WhatsApp com país e DDD.")
+    configuracao = obter_configuracao_comunicacao(db, usuario.clinica_id)
+    for campo, valor in dados.model_dump().items():
+        if isinstance(valor, str):
+            valor = valor.strip()
+        setattr(configuracao, campo, valor)
+    configuracao.atualizado_por_usuario_id = usuario.id
+    configuracao.atualizado_em = _agora_utc()
+    registrar_auditoria(
+        db,
+        request=request,
+        usuario=usuario,
+        acao="ALTERACAO",
+        recurso="configuracao_comunicacao",
+        registro_id=configuracao.id,
+        campos=list(type(dados).model_fields),
+        detalhes={
+            "email_ativo": configuracao.email_ativo,
+            "whatsapp_ativo": configuracao.whatsapp_ativo,
+            "lembrete_antecedencia_horas": configuracao.lembrete_antecedencia_horas,
+        },
+    )
+    db.commit()
+    db.refresh(configuracao)
+    return resposta_configuracao_comunicacao(configuracao)
+
+
+@app.get("/comunicacoes/historico", response_model=List[schemas.ComunicacaoResponse])
+def listar_historico_comunicacoes(
+    limite: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin")),
+):
+    return db.query(models.Comunicacao).filter(
+        models.Comunicacao.clinica_id == usuario.clinica_id
+    ).order_by(models.Comunicacao.criado_em.desc(), models.Comunicacao.id.desc()).limit(limite).all()
+
+
+@app.post("/comunicacoes/lembretes/processar", response_model=schemas.ProcessamentoComunicacaoResponse)
+def processar_lembretes_da_clinica(
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin")),
+):
+    processados, enviados, falhas = processar_lembretes_pendentes(usuario.clinica_id)
+    registrar_auditoria(
+        db,
+        request=request,
+        usuario=usuario,
+        acao="ALTERACAO",
+        recurso="comunicacao",
+        campos=["lembretes"],
+        detalhes={"processados": processados, "enviados": enviados, "falhas": falhas},
+    )
+    db.commit()
+    return schemas.ProcessamentoComunicacaoResponse(
+        agendamentos_processados=processados,
+        envios_realizados=enviados,
+        envios_com_falha=falhas,
+    )
+
+
 @app.get("/medicos/{medico_id}/horarios-disponiveis")
-def listar_horarios_disponiveis(medico_id: int, data: str, db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico"))):
+def listar_horarios_disponiveis(
+    medico_id: int,
+    data: str,
+    tipo_consulta_id: int | None = None,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico")),
+):
     try:
         dia = datetime.strptime(data, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Formato de data inválido. Use AAAA-MM-DD.")
-    medico = db.query(models.Medico).filter(
-        models.Medico.id == medico_id,
-        models.Medico.clinica_id == usuario.clinica_id,
-    ).first()
-    if not medico:
-        raise HTTPException(status_code=404, detail="Médico não encontrado.")
-    possiveis = horarios_do_dia(medico, dia)
-    ocupados = {agendamento.data_hora for agendamento in db.query(models.Agendamento).filter(models.Agendamento.clinica_id == usuario.clinica_id, models.Agendamento.medico_id == medico_id, models.Agendamento.data_hora >= datetime.combine(dia, datetime.min.time()), models.Agendamento.data_hora < datetime.combine(dia + timedelta(days=1), datetime.min.time()), models.Agendamento.status != "Cancelado").all()}
+    medico = medico_para_agenda(medico_id, usuario, db)
+    tipo = tipo_consulta_da_agenda(db, medico, tipo_consulta_id)
+    possiveis = horarios_do_dia(db, medico, dia, tipo)
+    ocupados = agendamentos_do_dia(db, medico, dia)
+    bloqueios = bloqueios_do_dia(db, medico, dia)
     agora = datetime.now()
-    return [horario.strftime("%H:%M") for horario in possiveis if horario not in ocupados and horario > agora]
+    return [
+        horario.strftime("%H:%M")
+        for horario in possiveis
+        if horario > agora and not horario_tem_conflito(
+            horario,
+            tipo.duracao_minutos,
+            tipo.intervalo_minutos,
+            ocupados,
+            bloqueios,
+        )
+    ]
 
 
 @app.post("/agendamentos/", response_model=schemas.AgendamentoResponse, status_code=status.HTTP_201_CREATED)
-def criar_agendamento(agendamento: schemas.AgendamentoCreate, request: Request, db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "paciente"))):
+def criar_agendamento(
+    agendamento: schemas.AgendamentoCreate,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "paciente")),
+):
     if agendamento.data_hora <= datetime.now():
         raise HTTPException(status_code=400, detail="A consulta deve ser agendada para uma data futura.")
     if usuario.role == "paciente" and paciente_do_usuario(usuario, db).id != agendamento.paciente_id:
@@ -965,28 +1777,76 @@ def criar_agendamento(agendamento: schemas.AgendamentoCreate, request: Request, 
     medico = db.query(models.Medico).filter(
         models.Medico.id == agendamento.medico_id,
         models.Medico.clinica_id == usuario.clinica_id,
-    ).first()
+    ).with_for_update().first()
     paciente = db.query(models.Paciente).filter(
         models.Paciente.id == agendamento.paciente_id,
         models.Paciente.clinica_id == usuario.clinica_id,
     ).first()
     if not medico or not paciente:
         raise HTTPException(status_code=404, detail="Médico ou paciente não encontrado.")
-    if agendamento.data_hora not in horarios_do_dia(medico, agendamento.data_hora.date()):
+    tipo = tipo_consulta_da_agenda(db, medico, agendamento.tipo_consulta_id)
+    if agendamento.data_hora not in horarios_do_dia(db, medico, agendamento.data_hora.date(), tipo):
         raise HTTPException(status_code=400, detail="O horário informado não pertence à agenda do médico.")
-    conflito = db.query(models.Agendamento).filter(models.Agendamento.clinica_id == usuario.clinica_id, models.Agendamento.medico_id == agendamento.medico_id, models.Agendamento.data_hora == agendamento.data_hora, models.Agendamento.status != "Cancelado").first()
-    if conflito:
+    if tipo.e_retorno:
+        if agendamento.retorno_de_agendamento_id is None:
+            raise HTTPException(status_code=400, detail="Selecione a consulta de origem deste retorno.")
+        origem = db.query(models.Agendamento).filter(
+            models.Agendamento.id == agendamento.retorno_de_agendamento_id,
+            models.Agendamento.clinica_id == usuario.clinica_id,
+            models.Agendamento.medico_id == medico.id,
+            models.Agendamento.paciente_id == paciente.id,
+            models.Agendamento.status == "Atendido",
+        ).first()
+        if not origem:
+            raise HTTPException(status_code=400, detail="O retorno exige uma consulta atendida do mesmo paciente e médico.")
+        prazo = tipo.prazo_retorno_dias or 30
+        if agendamento.data_hora <= origem.data_hora or agendamento.data_hora > origem.data_hora + timedelta(days=prazo):
+            raise HTTPException(status_code=400, detail=f"O retorno deve ocorrer em até {prazo} dias da consulta de origem.")
+        retorno_existente = db.query(models.Agendamento.id).filter(
+            models.Agendamento.clinica_id == usuario.clinica_id,
+            models.Agendamento.retorno_de_agendamento_id == origem.id,
+            models.Agendamento.status != "Cancelado",
+        ).first()
+        if retorno_existente:
+            raise HTTPException(status_code=409, detail="Esta consulta já possui um retorno ativo.")
+    elif agendamento.retorno_de_agendamento_id is not None:
+        raise HTTPException(status_code=400, detail="Somente tipos marcados como retorno aceitam uma consulta de origem.")
+
+    ocupados = agendamentos_do_dia(db, medico, agendamento.data_hora.date())
+    bloqueios = bloqueios_do_dia(db, medico, agendamento.data_hora.date())
+    if horario_tem_conflito(
+        agendamento.data_hora,
+        tipo.duracao_minutos,
+        tipo.intervalo_minutos,
+        ocupados,
+        bloqueios,
+    ):
         raise HTTPException(status_code=409, detail="Este horário acabou de ser ocupado.")
-    novo = models.Agendamento(clinica_id=usuario.clinica_id, **agendamento.model_dump())
+    novo = models.Agendamento(
+        clinica_id=usuario.clinica_id,
+        medico_id=medico.id,
+        paciente_id=paciente.id,
+        data_hora=agendamento.data_hora,
+        tipo_consulta_id=tipo.id,
+        tipo_consulta_nome=tipo.nome,
+        duracao_minutos=tipo.duracao_minutos,
+        intervalo_minutos=tipo.intervalo_minutos,
+        retorno_de_agendamento_id=agendamento.retorno_de_agendamento_id,
+    )
     db.add(novo)
     try:
         db.flush()
-        registrar_auditoria(db, request=request, usuario=usuario, acao="CRIACAO", recurso="agendamento", registro_id=novo.id, paciente_id=novo.paciente_id, campos=["medico_id", "paciente_id", "data_hora"])
+        registrar_auditoria(
+            db, request=request, usuario=usuario, acao="CRIACAO", recurso="agendamento",
+            registro_id=novo.id, paciente_id=novo.paciente_id,
+            campos=["medico_id", "paciente_id", "data_hora", "tipo_consulta_id", "retorno_de_agendamento_id"],
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Este horário acabou de ser ocupado.")
     db.refresh(novo)
+    background_tasks.add_task(processar_comunicacoes_agendamento, novo.id, "confirmacao")
     return novo
 
 
@@ -1001,7 +1861,15 @@ def listar_agendamentos(request: Request, db: Session = Depends(get_db), usuario
 
 
 @app.patch("/agendamentos/{agendamento_id}/status", response_model=schemas.AgendamentoResponse)
-def atualizar_status_agendamento(agendamento_id: int, status_novo: str, request: Request, db: Session = Depends(get_db), usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico"))):
+def atualizar_status_agendamento(
+    agendamento_id: int,
+    status_novo: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    motivo_cancelamento: str | None = Query(default=None, max_length=500),
+    db: Session = Depends(get_db),
+    usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico")),
+):
     agendamento = db.query(models.Agendamento).filter(
         models.Agendamento.id == agendamento_id,
         models.Agendamento.clinica_id == usuario.clinica_id,
@@ -1009,11 +1877,40 @@ def atualizar_status_agendamento(agendamento_id: int, status_novo: str, request:
     if not agendamento: raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
     permitidos = {"Confirmado", "Atendido", "Cancelado"}
     if status_novo not in permitidos: raise HTTPException(status_code=400, detail="Status inválido.")
-    if usuario.role == "paciente" and (agendamento.paciente_id != paciente_do_usuario(usuario, db).id or status_novo != "Cancelado"): raise HTTPException(status_code=403, detail="Paciente só pode cancelar a própria consulta.")
-    if usuario.role == "medico" and (agendamento.medico_id != medico_do_usuario(usuario, db).id or status_novo not in {"Confirmado", "Atendido"}): raise HTTPException(status_code=403, detail="Ação não permitida para este médico.")
+    if agendamento.status == "Cancelado":
+        raise HTTPException(status_code=409, detail="A consulta já está cancelada.")
+    if usuario.role == "paciente":
+        if agendamento.paciente_id != paciente_do_usuario(usuario, db).id or status_novo != "Cancelado":
+            raise HTTPException(status_code=403, detail="Paciente só pode cancelar a própria consulta.")
+        if not agendamento.medico.permite_cancelamento_paciente:
+            raise HTTPException(status_code=403, detail="Esta agenda não permite cancelamento direto pelo paciente.")
+        limite = agendamento.data_hora - timedelta(hours=agendamento.medico.antecedencia_cancelamento_horas)
+        if datetime.now() > limite:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "O prazo para cancelamento online terminou. "
+                    f"A antecedência mínima é de {agendamento.medico.antecedencia_cancelamento_horas} hora(s)."
+                ),
+            )
+    if usuario.role == "medico":
+        if agendamento.medico_id != medico_do_usuario(usuario, db).id or status_novo not in {"Confirmado", "Atendido", "Cancelado"}:
+            raise HTTPException(status_code=403, detail="Ação não permitida para este médico.")
+    if status_novo == "Cancelado":
+        motivo = (motivo_cancelamento or "Cancelamento solicitado pelo usuário").strip()
+        if len(motivo) < 3:
+            raise HTTPException(status_code=400, detail="Informe um motivo de cancelamento válido.")
+        agendamento.cancelado_em = _agora_utc()
+        agendamento.cancelado_por_usuario_id = usuario.id
+        agendamento.motivo_cancelamento = motivo
     agendamento.status = status_novo
-    registrar_auditoria(db, request=request, usuario=usuario, acao="ALTERACAO", recurso="agendamento", registro_id=agendamento.id, paciente_id=agendamento.paciente_id, campos=["status"])
+    campos = ["status"]
+    if status_novo == "Cancelado":
+        campos.extend(["cancelado_em", "cancelado_por_usuario_id", "motivo_cancelamento"])
+    registrar_auditoria(db, request=request, usuario=usuario, acao="ALTERACAO", recurso="agendamento", registro_id=agendamento.id, paciente_id=agendamento.paciente_id, campos=campos)
     db.commit(); db.refresh(agendamento)
+    if status_novo == "Cancelado":
+        background_tasks.add_task(processar_comunicacoes_agendamento, agendamento.id, "cancelamento")
     return agendamento
 
 
@@ -1647,6 +2544,14 @@ def registrar_clinica(dados: schemas.ClinicaProvisionamento, request: Request, d
         )
         db.add(admin)
         db.flush()
+        db.add(models.ConfiguracaoComunicacao(
+            clinica_id=clinica.id,
+            email_ativo=False,
+            email_remetente_nome=clinica.nome,
+            whatsapp_ativo=False,
+            atualizado_por_usuario_id=admin.id,
+            atualizado_em=_agora_utc(),
+        ))
         db.add_all(criar_consentimentos_obrigatorios(
             clinica_id=clinica.id,
             usuario_id=admin.id,
@@ -2186,7 +3091,7 @@ def solicitar_recuperacao_senha(dados: schemas.RecuperacaoSenhaRequest, db: Sess
         ).first()
     if usuario:
         try:
-            enviar_link_recuperacao(usuario.email, criar_token_recuperacao(usuario))
+            enviar_link_recuperacao(usuario.email, criar_token_recuperacao(usuario), clinica)
         except Exception:
             logger.exception("Não foi possível enviar o e-mail de recuperação")
     return {"mensagem": "Se o e-mail estiver cadastrado, você receberá as instruções para redefinir sua senha."}
@@ -2591,7 +3496,7 @@ FRONTEND_DIR = Path(__file__).resolve().parent
 for arquivo_frontend in (
     "login.html", "register.html", "recuperar-senha.html", "index.html",
     "paciente.html", "medico.html", "nova-clinica.html", "lgpd.html",
-    "seguranca.html", "termos.html", "privacidade.html", "app.css", "app.js",
+    "seguranca.html", "agenda-config.html", "comunicacao-config.html", "termos.html", "privacidade.html", "app.css", "app.js",
     "tailwind.css",
 ):
     app.add_api_route(

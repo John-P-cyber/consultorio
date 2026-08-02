@@ -1,5 +1,7 @@
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -55,6 +57,14 @@ def test_documentos_lgpd_e_assets_frontend_sao_publicos(client):
     assert "cdn.tailwindcss.com" not in cadastro.text
     assert 'href="tailwind.css"' in cadastro.text
 
+    agenda = client.get("/agenda-config.html")
+    assert agenda.status_code == 200
+    assert "Agenda profissional" in agenda.text
+
+    comunicacao = client.get("/comunicacao-config.html")
+    assert comunicacao.status_code == 200
+    assert "Central de comunicação" in comunicacao.text
+
     estilos = client.get("/tailwind.css")
     assert estilos.status_code == 200
     assert estilos.headers["content-type"].startswith("text/css")
@@ -62,8 +72,11 @@ def test_documentos_lgpd_e_assets_frontend_sao_publicos(client):
 
 @pytest.fixture()
 def client():
-    main.models.Base.metadata.drop_all(bind=main.engine)
-    main.models.Base.metadata.create_all(bind=main.engine)
+    with main.engine.connect() as conexao:
+        conexao.connection.dbapi_connection.execute("PRAGMA foreign_keys=OFF")
+        main.models.Base.metadata.drop_all(bind=conexao)
+        main.models.Base.metadata.create_all(bind=conexao)
+        conexao.connection.dbapi_connection.execute("PRAGMA foreign_keys=ON")
     main.tentativas_login.clear()
     with TestClient(main.app) as test_client:
         yield test_client
@@ -259,6 +272,32 @@ def test_reset_de_senha_invalida_link_apos_primeiro_uso(client):
     assert login(client, "paciente@example.com", "nova-senha-123").status_code == 200
 
 
+def test_recuperacao_de_senha_usa_smtp_e_mantem_resposta_generica(client, monkeypatch):
+    provisionar_clinica(client)
+    enviados = []
+
+    def email_falso(**dados):
+        enviados.append(dados)
+        return SimpleNamespace(identificador="email-recuperacao")
+
+    monkeypatch.setattr(main, "enviar_email", email_falso)
+    resposta = client.post("/auth/solicitar-recuperacao", json={
+        "clinica_slug": "clinica-a", "email": "admin@example.com",
+    })
+    assert resposta.status_code == 202
+    assert len(enviados) == 1
+    assert enviados[0]["destinatario"] == "admin@example.com"
+    assert "Redefinição de senha" in enviados[0]["assunto"]
+    assert "recuperar-senha.html?token=" in enviados[0]["texto"]
+
+    desconhecido = client.post("/auth/solicitar-recuperacao", json={
+        "clinica_slug": "clinica-a", "email": "desconhecido@example.com",
+    })
+    assert desconhecido.status_code == 202
+    assert desconhecido.json() == resposta.json()
+    assert len(enviados) == 1
+
+
 def test_conflito_de_horario_retorna_409(client):
     headers = criar_admin(client)
     paciente = client.post("/pacientes/", headers=headers, json=dados_paciente_perfil()).json()
@@ -266,6 +305,252 @@ def test_conflito_de_horario_retorna_409(client):
     dados = {"paciente_id": paciente["id"], "medico_id": medico["id"], "data_hora": "2099-01-05T08:00:00"}
     assert client.post("/agendamentos/", headers=headers, json=dados).status_code == 201
     assert client.post("/agendamentos/", headers=headers, json=dados).status_code == 409
+
+
+def test_agenda_semanal_intervalos_e_bloqueios_definem_horarios(client):
+    headers = criar_admin(client)
+    medico = client.post("/medicos/", headers=headers, json=dados_medico()).json()
+    tipos = client.get(f"/medicos/{medico['id']}/tipos-consulta", headers=headers).json()
+    consulta = next(item for item in tipos if not item["e_retorno"])
+
+    faixas = [
+        {"dia_semana": 0, "hora_inicio": "09:00", "hora_fim": "12:00"},
+        {"dia_semana": 0, "hora_inicio": "14:00", "hora_fim": "17:00"},
+    ]
+    resposta = client.put(f"/medicos/{medico['id']}/disponibilidades", headers=headers, json=faixas)
+    assert resposta.status_code == 200, resposta.text
+    horarios = client.get(
+        f"/medicos/{medico['id']}/horarios-disponiveis?data=2099-01-05&tipo_consulta_id={consulta['id']}",
+        headers=headers,
+    ).json()
+    assert horarios[:2] == ["09:00", "09:30"]
+    assert "12:00" not in horarios
+    assert "14:00" in horarios
+
+    bloqueio = client.post("/agenda/indisponibilidades", headers=headers, json={
+        "medico_id": medico["id"], "tipo": "bloqueio",
+        "inicio": "2099-01-05T10:00:00", "fim": "2099-01-05T11:00:00",
+        "motivo": "Reunião clínica",
+    })
+    assert bloqueio.status_code == 201, bloqueio.text
+    horarios = client.get(
+        f"/medicos/{medico['id']}/horarios-disponiveis?data=2099-01-05&tipo_consulta_id={consulta['id']}",
+        headers=headers,
+    ).json()
+    assert "09:30" in horarios
+    assert "10:00" not in horarios
+    assert "10:30" not in horarios
+    assert client.delete(
+        f"/agenda/indisponibilidades/{bloqueio.json()['id']}", headers=headers
+    ).status_code == 204
+
+
+def test_tipos_de_consulta_controlam_duracao_intervalo_e_conflitos(client):
+    headers = criar_admin(client)
+    paciente = client.post("/pacientes/", headers=headers, json=dados_paciente_perfil()).json()
+    medico = client.post("/medicos/", headers=headers, json=dados_medico()).json()
+    client.put(f"/medicos/{medico['id']}/disponibilidades", headers=headers, json=[
+        {"dia_semana": 0, "hora_inicio": "08:00", "hora_fim": "12:00"},
+    ])
+    longa = client.post(f"/medicos/{medico['id']}/tipos-consulta", headers=headers, json={
+        "nome": "Avaliação longa", "duracao_minutos": 60, "intervalo_minutos": 15,
+        "e_retorno": False,
+    })
+    assert longa.status_code == 201, longa.text
+    tipo_longo = longa.json()
+    horarios = client.get(
+        f"/medicos/{medico['id']}/horarios-disponiveis?data=2099-01-05&tipo_consulta_id={tipo_longo['id']}",
+        headers=headers,
+    ).json()
+    assert horarios == ["08:00", "09:15", "10:30"]
+    marcado = client.post("/agendamentos/", headers=headers, json={
+        "paciente_id": paciente["id"], "medico_id": medico["id"],
+        "tipo_consulta_id": tipo_longo["id"], "data_hora": "2099-01-05T08:00:00",
+    })
+    assert marcado.status_code == 201, marcado.text
+    assert marcado.json()["duracao_minutos"] == 60
+    assert marcado.json()["intervalo_minutos"] == 15
+
+    consulta = next(item for item in client.get(
+        f"/medicos/{medico['id']}/tipos-consulta", headers=headers
+    ).json() if item["nome"] == "Consulta")
+    horarios_curto = client.get(
+        f"/medicos/{medico['id']}/horarios-disponiveis?data=2099-01-05&tipo_consulta_id={consulta['id']}",
+        headers=headers,
+    ).json()
+    assert "08:00" not in horarios_curto
+    assert "08:30" not in horarios_curto
+    assert "09:00" not in horarios_curto
+    assert "09:30" in horarios_curto
+
+
+def test_retorno_exige_consulta_atendida_e_respeita_prazo(client):
+    headers_admin, _, paciente, medico, origem = preparar_atendimento_medico(client)
+    tipos = client.get(f"/medicos/{medico['id']}/tipos-consulta", headers=headers_admin).json()
+    retorno = next(item for item in tipos if item["e_retorno"])
+    sem_origem = client.post("/agendamentos/", headers=headers_admin, json={
+        "paciente_id": paciente["id"], "medico_id": medico["id"],
+        "tipo_consulta_id": retorno["id"], "data_hora": "2099-01-06T08:00:00",
+    })
+    assert sem_origem.status_code == 400
+    agendado = client.post("/agendamentos/", headers=headers_admin, json={
+        "paciente_id": paciente["id"], "medico_id": medico["id"],
+        "tipo_consulta_id": retorno["id"], "retorno_de_agendamento_id": origem["id"],
+        "data_hora": "2099-01-06T08:00:00",
+    })
+    assert agendado.status_code == 201, agendado.text
+    assert agendado.json()["retorno_de_agendamento_id"] == origem["id"]
+    duplicado = client.post("/agendamentos/", headers=headers_admin, json={
+        "paciente_id": paciente["id"], "medico_id": medico["id"],
+        "tipo_consulta_id": retorno["id"], "retorno_de_agendamento_id": origem["id"],
+        "data_hora": "2099-01-06T09:00:00",
+    })
+    assert duplicado.status_code == 409
+
+
+def test_politica_de_cancelamento_e_aplicada_ao_paciente(client):
+    headers_admin = criar_admin(client)
+    assert client.post("/auth/registrar", json=paciente_payload()).status_code == 201
+    medico = client.post("/medicos/", headers=headers_admin, json=dados_medico()).json()
+    alvo = (datetime.now() + timedelta(days=2)).replace(minute=0, second=0, microsecond=0)
+    client.put(f"/medicos/{medico['id']}/disponibilidades", headers=headers_admin, json=[{
+        "dia_semana": alvo.weekday(), "hora_inicio": "00:00", "hora_fim": "23:59",
+    }])
+    regras = client.patch(f"/medicos/{medico['id']}/regras-agenda", headers=headers_admin, json={
+        "permite_cancelamento_paciente": True, "antecedencia_cancelamento_horas": 72,
+    })
+    assert regras.status_code == 200, regras.text
+    db = main.SessionLocal()
+    try:
+        paciente = db.query(main.models.Paciente).filter_by(email="paciente@example.com").first()
+        paciente_id = paciente.id
+    finally:
+        db.close()
+    agendamento = client.post("/agendamentos/", headers=headers_admin, json={
+        "paciente_id": paciente_id, "medico_id": medico["id"], "data_hora": alvo.isoformat(),
+    })
+    assert agendamento.status_code == 201, agendamento.text
+    assert login(client, "paciente@example.com", "senha-forte-123").status_code == 200
+    headers_paciente = headers_sessao(client)
+    fora_do_prazo = client.patch(
+        f"/agendamentos/{agendamento.json()['id']}/status?status_novo=Cancelado",
+        headers=headers_paciente,
+    )
+    assert fora_do_prazo.status_code == 409
+    cancelado = client.patch(
+        f"/agendamentos/{agendamento.json()['id']}/status?status_novo=Cancelado&motivo_cancelamento=Solicitação%20administrativa",
+        headers=headers_admin,
+    )
+    assert cancelado.status_code == 200, cancelado.text
+    assert cancelado.json()["motivo_cancelamento"] == "Solicitação administrativa"
+
+
+def configuracao_comunicacao_payload(**alteracoes):
+    dados = {
+        "email_ativo": True,
+        "email_remetente_nome": "Clínica A",
+        "email_remetente": "atendimento@clinica.example.com",
+        "email_responder_para": "recepcao@clinica.example.com",
+        "whatsapp_ativo": True,
+        "whatsapp_phone_number_id": "123456789012345",
+        "whatsapp_numero_exibicao": "+55 11 99999-9999",
+        "whatsapp_codigo_pais": "55",
+        "whatsapp_template_confirmacao": "confirmacao_consulta",
+        "whatsapp_template_lembrete": "lembrete_consulta",
+        "whatsapp_template_cancelamento": "cancelamento_consulta",
+        "whatsapp_idioma": "pt_BR",
+        "enviar_confirmacoes": True,
+        "enviar_lembretes": True,
+        "enviar_cancelamentos": True,
+        "lembrete_antecedencia_horas": 24,
+    }
+    dados.update(alteracoes)
+    return dados
+
+
+def test_configuracao_de_comunicacao_e_isolada_e_exige_admin(client, monkeypatch):
+    headers_admin = criar_admin(client)
+    monkeypatch.setattr(main, "smtp_disponivel", lambda: True)
+    monkeypatch.setattr(main, "whatsapp_disponivel", lambda: True)
+
+    resposta = client.put(
+        "/comunicacoes/configuracao",
+        headers=headers_admin,
+        json=configuracao_comunicacao_payload(),
+    )
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["smtp_disponivel"] is True
+    assert resposta.json()["whatsapp_api_disponivel"] is True
+    assert resposta.json()["whatsapp_numero_exibicao"] == "+55 11 99999-9999"
+
+    assert client.post("/auth/registrar", json=paciente_payload()).status_code == 201
+    assert login(client, "paciente@example.com", "senha-forte-123").status_code == 200
+    headers_paciente = headers_sessao(client)
+    assert client.get("/comunicacoes/configuracao", headers=headers_paciente).status_code == 403
+    assert client.get("/comunicacoes/historico", headers=headers_paciente).status_code == 403
+
+
+def test_confirmacao_cancelamento_e_lembrete_usam_canais_oficiais_sem_duplicar(client, monkeypatch):
+    headers_admin = criar_admin(client)
+    paciente = client.post("/pacientes/", headers=headers_admin, json=dados_paciente_perfil()).json()
+    medico = client.post("/medicos/", headers=headers_admin, json=dados_medico()).json()
+    enviados_email = []
+    enviados_whatsapp = []
+
+    def email_falso(**dados):
+        enviados_email.append(dados)
+        return SimpleNamespace(identificador=f"email-{len(enviados_email)}")
+
+    def whatsapp_falso(**dados):
+        enviados_whatsapp.append(dados)
+        return SimpleNamespace(identificador=f"wamid-{len(enviados_whatsapp)}")
+
+    monkeypatch.setattr(main, "enviar_email", email_falso)
+    monkeypatch.setattr(main, "enviar_template_whatsapp", whatsapp_falso)
+    assert client.put(
+        "/comunicacoes/configuracao",
+        headers=headers_admin,
+        json=configuracao_comunicacao_payload(),
+    ).status_code == 200
+
+    agendamento = client.post("/agendamentos/", headers=headers_admin, json={
+        "paciente_id": paciente["id"], "medico_id": medico["id"], "data_hora": "2099-01-05T08:00:00",
+    })
+    assert agendamento.status_code == 201, agendamento.text
+    agendamento_id = agendamento.json()["id"]
+    assert len(enviados_email) == 1
+    assert len(enviados_whatsapp) == 1
+    assert enviados_whatsapp[0]["phone_number_id"] == "123456789012345"
+    assert enviados_whatsapp[0]["codigo_pais"] == "55"
+
+    main.processar_comunicacoes_agendamento(agendamento_id, "confirmacao")
+    assert len(enviados_email) == 1
+    assert len(enviados_whatsapp) == 1
+
+    with main.SessionLocal() as db:
+        registro = db.query(main.models.Agendamento).filter_by(id=agendamento_id).one()
+        registro.data_hora = datetime.now() + timedelta(hours=2)
+        db.commit()
+
+    lembretes = client.post("/comunicacoes/lembretes/processar", headers=headers_admin)
+    assert lembretes.status_code == 200, lembretes.text
+    assert lembretes.json()["envios_realizados"] == 2
+    assert client.post("/comunicacoes/lembretes/processar", headers=headers_admin).json()["envios_realizados"] == 0
+
+    cancelamento = client.patch(
+        f"/agendamentos/{agendamento_id}/status?status_novo=Cancelado&motivo_cancelamento=Paciente%20avisou",
+        headers=headers_admin,
+    )
+    assert cancelamento.status_code == 200, cancelamento.text
+    assert len(enviados_email) == 3
+    assert len(enviados_whatsapp) == 3
+    assert enviados_whatsapp[-1]["template"] == "cancelamento_consulta"
+    assert enviados_whatsapp[-1]["parametros"][-1] == "Paciente avisou"
+
+    historico = client.get("/comunicacoes/historico", headers=headers_admin)
+    assert historico.status_code == 200
+    assert len(historico.json()) == 6
+    assert all("@clinica.example.com" not in (item["destinatario_resumo"] or "") or "***" in item["destinatario_resumo"] for item in historico.json())
 
 
 def test_medico_so_acessa_pacientes_e_exames_vinculados(client):

@@ -13,8 +13,10 @@
         
         <div class="app-topbar flex items-center justify-between border border-gray-200 rounded-2xl px-6 py-4 relative">
             <h1 class="text-3xl font-bold text-blue-800">Clínica Saúde</h1>
-            <div class="flex items-center gap-3">
+            <div class="flex flex-wrap items-center justify-end gap-3">
                 <span class="hidden sm:inline text-sm font-semibold bg-blue-100 text-blue-800 py-1 px-3 rounded-full">Painel Administrativo</span>
+                <a href="agenda-config.html" class="text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg">Configurar agenda</a>
+                <a href="comunicacao-config.html" class="text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg">Comunicação</a>
                 <a href="seguranca.html" class="text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg">Segurança</a>
                 <a href="lgpd.html" class="text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg">Privacidade e auditoria</a>
                 <button onclick="terminarSessao()" class="text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg">Sair</button>
@@ -36,7 +38,7 @@
         <div id="aba-agenda" class="tab-content block space-y-6 animate-[fadeIn_0.3s_ease-in-out]">
             <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h2 class="text-lg font-bold mb-4 text-green-700">Agendar Nova Consulta</h2>
-                <form id="form-agendamento" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <form id="form-agendamento" class="grid grid-cols-1 md:grid-cols-6 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Paciente</label>
                         <select id="select-paciente" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50"></select>
@@ -44,6 +46,10 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Médico</label>
                         <select id="select-medico" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50"></select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Tipo de consulta</label>
+                        <select id="select-tipo-consulta" required disabled class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 disabled:bg-gray-200"></select>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Data</label>
@@ -55,6 +61,10 @@
                     </div>
                     <div class="flex items-end">
                         <button type="submit" class="w-full bg-green-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-green-700 transition">Confirmar</button>
+                    </div>
+                    <div id="campo-retorno-admin" class="hidden md:col-span-3">
+                        <label class="block text-sm font-medium text-gray-700">Consulta atendida de origem</label>
+                        <select id="select-retorno-origem" class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50"></select>
                     </div>
                 </form>
             </div>
@@ -251,6 +261,8 @@
 
         let pacienteEditandoId = null;
         let medicoEditandoId = null;
+        let tiposAgendaAdmin = [];
+        let agendamentosAgendaAdmin = [];
 
         function limparFormularioPaciente() {
             document.getElementById('form-paciente').reset();
@@ -399,24 +411,54 @@
 
         async function carregarHorarios() {
             const medId = document.getElementById('select-medico').value; const data = document.getElementById('data-consulta').value;
+            const tipoId = document.getElementById('select-tipo-consulta').value;
             const sHorario = document.getElementById('select-horario');
-            if (!medId || !data) { sHorario.disabled = true; return; }
+            if (!medId || !data || !tipoId) { sHorario.disabled = true; return; }
             try {
-                const res = await fetch(`${API_URL}/medicos/${medId}/horarios-disponiveis?data=${data}`);
+                const res = await fetch(`${API_URL}/medicos/${medId}/horarios-disponiveis?data=${data}&tipo_consulta_id=${tipoId}`);
                 const horarios = await res.json();
                 sHorario.innerHTML = '<option value="">Escolha um horário</option>' + horarios.map(h => `<option value="${h}">${h}</option>`).join('');
                 sHorario.disabled = false;
             } catch (e) {}
         }
-        document.getElementById('select-medico').addEventListener('change', carregarHorarios);
+
+        async function carregarTiposAgendaAdmin() {
+            const medicoId = document.getElementById('select-medico').value;
+            const seletor = document.getElementById('select-tipo-consulta');
+            tiposAgendaAdmin = [];
+            seletor.innerHTML = '<option value="">Selecione...</option>';
+            seletor.disabled = true;
+            if (!medicoId) return;
+            const resposta = await fetch(`${API_URL}/medicos/${medicoId}/tipos-consulta`);
+            tiposAgendaAdmin = await resposta.json();
+            seletor.innerHTML = '<option value="">Selecione...</option>' + tiposAgendaAdmin.map(tipo => `<option value="${tipo.id}">${escapeHTML(tipo.nome)} · ${tipo.duracao_minutos} min</option>`).join('');
+            seletor.disabled = false;
+            atualizarRetornosAdmin();
+        }
+
+        function atualizarRetornosAdmin() {
+            const tipo = tiposAgendaAdmin.find(item => String(item.id) === document.getElementById('select-tipo-consulta').value);
+            const campo = document.getElementById('campo-retorno-admin');
+            campo.classList.toggle('hidden', !tipo?.e_retorno);
+            const pacienteId = Number(document.getElementById('select-paciente').value);
+            const medicoId = Number(document.getElementById('select-medico').value);
+            const origens = agendamentosAgendaAdmin.filter(item => item.status === 'Atendido' && item.paciente_id === pacienteId && item.medico_id === medicoId && !item.retorno_de_agendamento_id);
+            document.getElementById('select-retorno-origem').innerHTML = '<option value="">Selecione...</option>' + origens.map(item => `<option value="${item.id}">${new Date(item.data_hora).toLocaleString('pt-BR')} · ${escapeHTML(item.tipo_consulta_nome)}</option>`).join('');
+        }
+
+        document.getElementById('select-medico').addEventListener('change', async () => { await carregarTiposAgendaAdmin(); carregarHorarios(); });
+        document.getElementById('select-tipo-consulta').addEventListener('change', () => { atualizarRetornosAdmin(); carregarHorarios(); });
+        document.getElementById('select-paciente').addEventListener('change', atualizarRetornosAdmin);
         document.getElementById('data-consulta').addEventListener('change', carregarHorarios);
 
         document.getElementById('form-agendamento').addEventListener('submit', async function(e) {
             e.preventDefault();
-            const dados = { paciente_id: parseInt(document.getElementById('select-paciente').value), medico_id: parseInt(document.getElementById('select-medico').value), data_hora: `${document.getElementById('data-consulta').value}T${document.getElementById('select-horario').value}:00` };
+            const tipo = tiposAgendaAdmin.find(item => String(item.id) === document.getElementById('select-tipo-consulta').value);
+            const dados = { paciente_id: parseInt(document.getElementById('select-paciente').value), medico_id: parseInt(document.getElementById('select-medico').value), tipo_consulta_id: parseInt(document.getElementById('select-tipo-consulta').value), retorno_de_agendamento_id: tipo?.e_retorno ? parseInt(document.getElementById('select-retorno-origem').value) : null, data_hora: `${document.getElementById('data-consulta').value}T${document.getElementById('select-horario').value}:00` };
             try {
                 const res = await fetch(`${API_URL}/agendamentos/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
-                if (res.ok) { alert("Consulta Marcada!"); this.reset(); buscarAgendamentos(); } else { alert("Erro ao agendar."); }
+                const retorno = await res.json();
+                if (res.ok) { alert("Consulta marcada!"); this.reset(); document.getElementById('select-horario').disabled = true; document.getElementById('select-tipo-consulta').disabled = true; buscarAgendamentos(); } else { alert(mensagemErroAPI(retorno)); }
             } catch (error) {}
         });
 
@@ -426,6 +468,8 @@
             try {
                 const [resA, resP, resM] = await Promise.all([fetch(`${API_URL}/agendamentos/`), fetch(`${API_URL}/pacientes/`), fetch(`${API_URL}/medicos/`)]);
                 const agendamentos = await resA.json(); const pacientes = await resP.json(); const medicos = await resM.json();
+                agendamentosAgendaAdmin = agendamentos;
+                atualizarRetornosAdmin();
 
                 lista.innerHTML = '';
                 agendamentos.forEach(ag => {
@@ -439,6 +483,7 @@
                         <li class="border border-gray-200 p-4 rounded-xl bg-white shadow-sm relative">
                             <div class="font-bold text-gray-800 text-lg">${escapeHTML(p.nome)}</div>
                             <div class="text-blue-600 font-medium text-sm mb-2">👨‍⚕️ ${escapeHTML(m.nome)}</div>
+                            <div class="text-gray-500 text-xs mb-2">${escapeHTML(ag.tipo_consulta_nome)} · ${ag.duracao_minutos} min${ag.retorno_de_agendamento_id ? ' · retorno' : ''}</div>
                             <div class="text-gray-700 text-sm mb-2">📅 ${dataFormatada}</div>
                             <select onchange="atualizarStatus(${ag.id}, this.value)" class="text-xs font-bold px-2 py-2 rounded-lg border border-gray-300 w-full mb-1 bg-gray-50 focus:ring-blue-500">
                                 <option value="Confirmado" ${ag.status === 'Confirmado' ? 'selected' : ''}>⏳ Confirmado</option>
@@ -453,7 +498,10 @@
 
         async function atualizarStatus(id, status) {
             try {
-                await fetch(`${API_URL}/agendamentos/${id}/status?status_novo=${status}`, { method: 'PATCH' });
+                const motivo = status === 'Cancelado' ? prompt('Informe o motivo do cancelamento:') : null;
+                if (status === 'Cancelado' && motivo === null) return buscarAgendamentos();
+                const resposta = await fetch(`${API_URL}/agendamentos/${id}/status?status_novo=${status}${motivo ? `&motivo_cancelamento=${encodeURIComponent(motivo)}` : ''}`, { method: 'PATCH' });
+                if (!resposta.ok) alert(mensagemErroAPI(await resposta.json()));
                 buscarAgendamentos(); // Recarrega para mostrar ou esconder o botão de avaliar
             } catch (error) { alert("Erro ao atualizar status."); }
         }

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comunicação | Clínica Saúde</title>
+    <link rel="stylesheet" href="tailwind.css">
+    <link rel="stylesheet" href="app.css">
+</head>
+<body class="app-shell bg-gray-50 font-sans text-gray-800 min-h-screen" data-role="admin">
+    <header class="bg-white border-b border-gray-200 shadow-sm">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex flex-wrap gap-4 items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="brand-mark" aria-hidden="true">+</span>
+                <div><p class="page-kicker">Relacionamento com o paciente</p><h1 class="text-2xl font-extrabold text-blue-950">Central de comunicação</h1></div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="index.html" class="text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg">Voltar ao portal</a>
+                <button onclick="encerrarSessao()" class="text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-lg">Sair</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-6 py-8 space-y-6">
+        <section class="bg-blue-950 text-white rounded-2xl p-6 shadow-md">
+            <p class="text-xs font-bold uppercase tracking-widest text-blue-200">Canais oficiais e auditáveis</p>
+            <h2 class="text-2xl font-bold mt-2">Confirmações, lembretes e cancelamentos</h2>
+            <p class="text-blue-100 text-sm mt-2 max-w-3xl">As credenciais ficam protegidas no ambiente do servidor. Esta tela controla apenas as opções da clínica, o número oficial e os modelos aprovados.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5 max-w-2xl">
+                <div id="status-smtp" class="rounded-xl border border-blue-700 bg-blue-900/50 p-4"></div>
+                <div id="status-whatsapp" class="rounded-xl border border-blue-700 bg-blue-900/50 p-4"></div>
+            </div>
+        </section>
+
+        <form id="form-configuracao" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                    <div class="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
+                        <div><p class="text-xs font-bold uppercase tracking-wide text-blue-700">Canal 1</p><h2 class="text-xl font-bold text-gray-900 mt-1">E-mail via SMTP</h2><p class="text-sm text-gray-500 mt-1">Usado também na recuperação de senha.</p></div>
+                        <label class="inline-flex items-center gap-2 text-sm font-semibold"><input id="email-ativo" type="checkbox" class="h-5 w-5"><span>Ativo</span></label>
+                    </div>
+                    <div class="space-y-4 mt-5">
+                        <div><label for="email-remetente-nome" class="text-sm font-semibold">Nome do remetente</label><input id="email-remetente-nome" required minlength="2" maxlength="160" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5" placeholder="Clínica Exemplo"></div>
+                        <div><label for="email-remetente" class="text-sm font-semibold">Endereço do remetente</label><input id="email-remetente" type="email" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5" placeholder="atendimento@clinica.com"><p class="text-xs text-gray-500 mt-1">Deixe vazio para usar o endereço padrão do servidor.</p></div>
+                        <div><label for="email-responder-para" class="text-sm font-semibold">Responder para</label><input id="email-responder-para" type="email" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5" placeholder="recepcao@clinica.com"></div>
+                    </div>
+                </section>
+
+                <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                    <div class="flex items-start justify-between gap-4 border-b border-gray-100 pb-4">
+                        <div><p class="text-xs font-bold uppercase tracking-wide text-green-700">Canal 2</p><h2 class="text-xl font-bold text-gray-900 mt-1">WhatsApp Cloud API</h2><p class="text-sm text-gray-500 mt-1">Integração oficial da Meta; não usa WhatsApp Web.</p></div>
+                        <label class="inline-flex items-center gap-2 text-sm font-semibold"><input id="whatsapp-ativo" type="checkbox" class="h-5 w-5"><span>Ativo</span></label>
+                    </div>
+                    <div class="space-y-4 mt-5">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div><label for="whatsapp-numero" class="text-sm font-semibold">Número com país e DDD</label><input id="whatsapp-numero" maxlength="30" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5" placeholder="+55 11 99999-9999"></div>
+                            <div><label for="whatsapp-phone-id" class="text-sm font-semibold">Phone number ID</label><input id="whatsapp-phone-id" inputmode="numeric" pattern="[0-9]+" maxlength="80" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5" placeholder="1234567890"></div>
+                            <div><label for="whatsapp-codigo-pais" class="text-sm font-semibold">País dos pacientes</label><div class="mt-1 flex items-center border border-gray-300 rounded-lg"><span class="pl-3 text-gray-500">+</span><input id="whatsapp-codigo-pais" inputmode="numeric" pattern="[0-9]+" maxlength="3" required class="w-full p-2.5 rounded-lg" placeholder="55"></div></div>
+                        </div>
+                        <div><label for="whatsapp-idioma" class="text-sm font-semibold">Idioma dos modelos</label><input id="whatsapp-idioma" required pattern="[a-z]{2}(_[A-Z]{2})?" value="pt_BR" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"></div>
+                        <div class="grid grid-cols-1 gap-3">
+                            <div><label for="template-confirmacao" class="text-xs font-semibold">Confirmação</label><input id="template-confirmacao" required pattern="[a-z0-9_]+" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5 text-sm"></div>
+                            <div><label for="template-lembrete" class="text-xs font-semibold">Lembrete</label><input id="template-lembrete" required pattern="[a-z0-9_]+" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5 text-sm"></div>
+                            <div><label for="template-cancelamento" class="text-xs font-semibold">Cancelamento</label><input id="template-cancelamento" required pattern="[a-z0-9_]+" class="mt-1 w-full border border-gray-300 rounded-lg p-2.5 text-sm"></div>
+                        </div>
+                        <div class="rounded-xl bg-green-50 border border-green-100 p-3 text-xs text-green-900"><strong>Contrato dos modelos:</strong> confirmação e lembrete recebem nome, clínica, tipo, médico, data e hora. Cancelamento recebe também o motivo.</div>
+                    </div>
+                </section>
+            </div>
+
+            <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                    <div><h2 class="text-xl font-bold text-gray-900">Automação</h2><p class="text-sm text-gray-500 mt-1">Escolha os eventos que devem usar todos os canais ativos.</p></div>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 text-sm"><input id="enviar-confirmacoes" type="checkbox" class="h-4 w-4"><span>Enviar ao confirmar uma consulta</span></label>
+                        <label class="flex items-center gap-3 text-sm"><input id="enviar-lembretes" type="checkbox" class="h-4 w-4"><span>Enviar lembretes automáticos</span></label>
+                        <label class="flex items-center gap-3 text-sm"><input id="enviar-cancelamentos" type="checkbox" class="h-4 w-4"><span>Enviar ao cancelar uma consulta</span></label>
+                    </div>
+                    <div><label for="lembrete-horas" class="text-sm font-semibold">Antecedência do lembrete (horas)</label><input id="lembrete-horas" type="number" min="1" max="168" required class="mt-1 w-full border border-gray-300 rounded-lg p-2.5"><p class="text-xs text-gray-500 mt-1">O histórico garante que cada canal envie apenas uma vez.</p></div>
+                </div>
+                <div class="flex flex-col sm:flex-row justify-end gap-3 border-t border-gray-100 mt-6 pt-5">
+                    <button id="processar-lembretes" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold px-5 py-2.5 rounded-lg">Processar lembretes agora</button>
+                    <button type="submit" class="bg-blue-700 hover:bg-blue-800 text-white font-bold px-6 py-2.5 rounded-lg">Salvar comunicação</button>
+                </div>
+            </section>
+        </form>
+
+        <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-4">
+                <div><h2 class="text-xl font-bold text-gray-900">Histórico de envios</h2><p class="text-sm text-gray-500 mt-1">Destinatários aparecem mascarados e erros não expõem credenciais.</p></div>
+                <button id="atualizar-historico" class="text-sm font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg">Atualizar</button>
+            </div>
+            <div class="overflow-x-auto mt-4">
+                <table class="w-full text-sm"><thead><tr class="text-left text-xs uppercase tracking-wide text-gray-500"><th class="py-3 pr-4">Data</th><th class="py-3 pr-4">Evento</th><th class="py-3 pr-4">Canal</th><th class="py-3 pr-4">Destino</th><th class="py-3 pr-4">Situação</th><th class="py-3">Detalhe</th></tr></thead><tbody id="historico-comunicacoes" class="divide-y divide-gray-100"></tbody></table>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        const API_URL = window.location.origin;
+
+        async function api(url, opcoes = {}) {
+            const resposta = await fetch(`${API_URL}${url}`, opcoes);
+            const dados = await resposta.json().catch(() => null);
+            if (!resposta.ok) throw new Error(mensagemErroAPI(dados));
+            return dados;
+        }
+
+        function valor(id) { const texto = document.getElementById(id).value.trim(); return texto || null; }
+        function marcarStatus(id, disponivel, titulo) {
+            document.getElementById(id).innerHTML = `<p class="text-xs uppercase font-bold tracking-wide ${disponivel ? 'text-green-200' : 'text-amber-200'}">${disponivel ? 'Servidor pronto' : 'Configuração pendente'}</p><strong class="block mt-1">${titulo}</strong>`;
+        }
+
+        function preencherFormulario(dados) {
+            const checks = {'email-ativo': dados.email_ativo, 'whatsapp-ativo': dados.whatsapp_ativo, 'enviar-confirmacoes': dados.enviar_confirmacoes, 'enviar-lembretes': dados.enviar_lembretes, 'enviar-cancelamentos': dados.enviar_cancelamentos};
+            Object.entries(checks).forEach(([id, checked]) => { document.getElementById(id).checked = checked; });
+            document.getElementById('email-remetente-nome').value = dados.email_remetente_nome || '';
+            document.getElementById('email-remetente').value = dados.email_remetente || '';
+            document.getElementById('email-responder-para').value = dados.email_responder_para || '';
+            document.getElementById('whatsapp-numero').value = dados.whatsapp_numero_exibicao || '';
+            document.getElementById('whatsapp-phone-id').value = dados.whatsapp_phone_number_id || '';
+            document.getElementById('whatsapp-codigo-pais').value = dados.whatsapp_codigo_pais || '55';
+            document.getElementById('whatsapp-idioma').value = dados.whatsapp_idioma;
+            document.getElementById('template-confirmacao').value = dados.whatsapp_template_confirmacao;
+            document.getElementById('template-lembrete').value = dados.whatsapp_template_lembrete;
+            document.getElementById('template-cancelamento').value = dados.whatsapp_template_cancelamento;
+            document.getElementById('lembrete-horas').value = dados.lembrete_antecedencia_horas;
+            marcarStatus('status-smtp', dados.smtp_disponivel, 'SMTP transacional');
+            marcarStatus('status-whatsapp', dados.whatsapp_api_disponivel, 'WhatsApp Cloud API');
+        }
+
+        function payloadFormulario() {
+            return {
+                email_ativo: document.getElementById('email-ativo').checked,
+                email_remetente_nome: valor('email-remetente-nome'), email_remetente: valor('email-remetente'), email_responder_para: valor('email-responder-para'),
+                whatsapp_ativo: document.getElementById('whatsapp-ativo').checked,
+                whatsapp_phone_number_id: valor('whatsapp-phone-id'), whatsapp_numero_exibicao: valor('whatsapp-numero'), whatsapp_codigo_pais: valor('whatsapp-codigo-pais'),
+                whatsapp_template_confirmacao: valor('template-confirmacao'), whatsapp_template_lembrete: valor('template-lembrete'), whatsapp_template_cancelamento: valor('template-cancelamento'), whatsapp_idioma: valor('whatsapp-idioma'),
+                enviar_confirmacoes: document.getElementById('enviar-confirmacoes').checked, enviar_lembretes: document.getElementById('enviar-lembretes').checked, enviar_cancelamentos: document.getElementById('enviar-cancelamentos').checked,
+                lembrete_antecedencia_horas: Number(document.getElementById('lembrete-horas').value),
+            };
+        }
+
+        async function carregarHistorico() {
+            const itens = await api('/comunicacoes/historico?limite=100');
+            document.getElementById('historico-comunicacoes').innerHTML = itens.map(item => {
+                const cores = {enviado: 'bg-green-100 text-green-800', falhou: 'bg-red-100 text-red-800', pendente: 'bg-amber-100 text-amber-800', ignorado: 'bg-gray-100 text-gray-700'};
+                return `<tr><td class="py-3 pr-4 whitespace-nowrap">${new Date(item.criado_em).toLocaleString('pt-BR')}</td><td class="py-3 pr-4 capitalize">${escapeHTML(item.evento)}</td><td class="py-3 pr-4 capitalize">${escapeHTML(item.canal)}</td><td class="py-3 pr-4">${escapeHTML(item.destinatario_resumo || '—')}</td><td class="py-3 pr-4"><span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${cores[item.status] || cores.ignorado}">${escapeHTML(item.status)}</span></td><td class="py-3 text-xs text-gray-500">${escapeHTML(item.ultimo_erro || item.provedor_mensagem_id || 'Envio registrado')}</td></tr>`;
+            }).join('') || '<tr><td colspan="6" class="py-8 text-center text-gray-500">Nenhuma comunicação enviada ainda.</td></tr>';
+        }
+
+        document.getElementById('form-configuracao').addEventListener('submit', async event => {
+            event.preventDefault();
+            try {
+                const dados = await api('/comunicacoes/configuracao', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payloadFormulario())});
+                preencherFormulario(dados); mostrarSucesso('Configuração de comunicação salva.');
+            } catch (error) { alert(error.message); }
+        });
+        document.getElementById('processar-lembretes').addEventListener('click', async () => {
+            try {
+                const resultado = await api('/comunicacoes/lembretes/processar', {method: 'POST'});
+                mostrarSucesso(`${resultado.agendamentos_processados} consulta(s) verificada(s), ${resultado.envios_realizados} envio(s) realizado(s).`);
+                await carregarHistorico();
+            } catch (error) { alert(error.message); }
+        });
+        document.getElementById('atualizar-historico').addEventListener('click', () => carregarHistorico().catch(error => alert(error.message)));
+        (async () => {
+            if (!await exigirSessao('admin')) return;
+            preencherFormulario(await api('/comunicacoes/configuracao'));
+            await carregarHistorico();
+        })().catch(error => alert(error.message));
+    </script>
+</body>
+</html>

@@ -23,7 +23,7 @@ Crie dois ambientes separados. O recomendado é usar contas/projetos ou, no mín
 | Linux/Docker | servidor de staging | servidor de produção |
 | PostgreSQL | banco e usuário exclusivos | banco e usuário exclusivos |
 | Objetos/backup | prefixo ou bucket exclusivo | bucket exclusivo, versionado |
-| Chaves e SMTP | credenciais de sandbox | credenciais reais exclusivas |
+| Chaves, SMTP e WhatsApp | credenciais de sandbox | credenciais reais exclusivas |
 
 No PostgreSQL gerenciado, ative TLS, backups automáticos do provedor e recuperação point-in-time (PITR). Defina e registre RPO/RTO; uma meta inicial razoável precisa ser aprovada pelo negócio, por exemplo RPO de 15 minutos e RTO de 4 horas. O `pg_dump` deste projeto é uma segunda camada e não substitui o WAL/PITR do provedor.
 
@@ -42,6 +42,8 @@ Arquivos mínimos por ambiente:
 - `/etc/consultorio/alertmanager.yml`: canal real de alerta.
 
 Gere `SECRET_KEY`, `MFA_MASTER_KEY`, `CLINIC_PROVISIONING_TOKEN`, senha do Grafana e `RESTIC_PASSWORD` separadamente, com um gerenciador de segredos. Não reutilize valores entre staging e produção. Guarde também uma cópia protegida de `MFA_MASTER_KEY` e `RESTIC_PASSWORD`; perdê-las impede, respectivamente, validar os autenticadores atuais e restaurar o backup externo.
+
+Configure SMTP com TLS e remetente verificado. Para a integração oficial do WhatsApp, armazene `WHATSAPP_ACCESS_TOKEN` somente no cofre de segredos e configure número, `phone_number_id`, idioma e modelos aprovados no painel de cada clínica. Habilite `COMMUNICATION_WORKER_ENABLED` em somente um processo; em instalações com várias réplicas, mova o processador para um worker dedicado mantendo a idempotência do banco.
 
 ## 3. Primeiro deploy manual
 

@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Time,
     UniqueConstraint,
     text,
 )
@@ -41,6 +42,13 @@ class Clinica(Base):
     solicitacoes_lgpd = relationship("SolicitacaoLGPD", back_populates="clinica")
     sessoes = relationship("SessaoUsuario", back_populates="clinica")
     codigos_recuperacao_mfa = relationship("MfaCodigoRecuperacao", back_populates="clinica")
+    disponibilidades_agenda = relationship("DisponibilidadeAgenda", back_populates="clinica")
+    tipos_consulta = relationship("TipoConsulta", back_populates="clinica")
+    indisponibilidades_agenda = relationship("IndisponibilidadeAgenda", back_populates="clinica")
+    configuracao_comunicacao = relationship(
+        "ConfiguracaoComunicacao", back_populates="clinica", uselist=False, cascade="all, delete-orphan"
+    )
+    comunicacoes = relationship("Comunicacao", back_populates="clinica")
 
 
 class Usuario(Base):
@@ -183,6 +191,8 @@ class Medico(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     avaliacao_media = Column(Float, default=0.0)
+    permite_cancelamento_paciente = Column(Boolean, nullable=False, default=True)
+    antecedencia_cancelamento_horas = Column(Integer, nullable=False, default=24)
 
     clinica = relationship("Clinica", back_populates="medicos")
     usuario = relationship("Usuario", back_populates="medico")
@@ -190,10 +200,94 @@ class Medico(Base):
     avaliacoes = relationship("Avaliacao", back_populates="medico")
     prontuarios = relationship("ProntuarioEntrada", back_populates="medico")
     prescricoes = relationship("Prescricao", back_populates="medico")
+    disponibilidades_agenda = relationship(
+        "DisponibilidadeAgenda", back_populates="medico", cascade="all, delete-orphan"
+    )
+    tipos_consulta = relationship("TipoConsulta", back_populates="medico", cascade="all, delete-orphan")
+    indisponibilidades_agenda = relationship("IndisponibilidadeAgenda", back_populates="medico")
 
     __table_args__ = (
         UniqueConstraint("clinica_id", "crm", name="uq_medicos_clinica_crm"),
         UniqueConstraint("clinica_id", "email", name="uq_medicos_clinica_email"),
+        CheckConstraint(
+            "antecedencia_cancelamento_horas >= 0 AND antecedencia_cancelamento_horas <= 720",
+            name="ck_medicos_antecedencia_cancelamento",
+        ),
+    )
+
+
+class DisponibilidadeAgenda(Base):
+    __tablename__ = "disponibilidades_agenda"
+
+    id = Column(Integer, primary_key=True)
+    clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
+    medico_id = Column(Integer, ForeignKey("medicos.id", ondelete="CASCADE"), nullable=False, index=True)
+    dia_semana = Column(Integer, nullable=False)
+    hora_inicio = Column(Time, nullable=False)
+    hora_fim = Column(Time, nullable=False)
+
+    clinica = relationship("Clinica", back_populates="disponibilidades_agenda")
+    medico = relationship("Medico", back_populates="disponibilidades_agenda")
+
+    __table_args__ = (
+        CheckConstraint("dia_semana >= 0 AND dia_semana <= 6", name="ck_disponibilidade_dia_semana"),
+        CheckConstraint("hora_fim > hora_inicio", name="ck_disponibilidade_intervalo"),
+        UniqueConstraint(
+            "clinica_id", "medico_id", "dia_semana", "hora_inicio", "hora_fim",
+            name="uq_disponibilidade_medico_faixa",
+        ),
+        Index("ix_disponibilidade_medico_dia", "clinica_id", "medico_id", "dia_semana"),
+    )
+
+
+class TipoConsulta(Base):
+    __tablename__ = "tipos_consulta"
+
+    id = Column(Integer, primary_key=True)
+    clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
+    medico_id = Column(Integer, ForeignKey("medicos.id", ondelete="CASCADE"), nullable=False, index=True)
+    nome = Column(String(100), nullable=False)
+    duracao_minutos = Column(Integer, nullable=False, default=30)
+    intervalo_minutos = Column(Integer, nullable=False, default=0)
+    e_retorno = Column(Boolean, nullable=False, default=False)
+    prazo_retorno_dias = Column(Integer, nullable=True)
+    ativo = Column(Boolean, nullable=False, default=True)
+
+    clinica = relationship("Clinica", back_populates="tipos_consulta")
+    medico = relationship("Medico", back_populates="tipos_consulta")
+    agendamentos = relationship("Agendamento", back_populates="tipo_consulta")
+
+    __table_args__ = (
+        UniqueConstraint("clinica_id", "medico_id", "nome", name="uq_tipo_consulta_medico_nome"),
+        CheckConstraint("duracao_minutos >= 10 AND duracao_minutos <= 240", name="ck_tipo_consulta_duracao"),
+        CheckConstraint("intervalo_minutos >= 0 AND intervalo_minutos <= 120", name="ck_tipo_consulta_intervalo"),
+        CheckConstraint(
+            "prazo_retorno_dias IS NULL OR (prazo_retorno_dias >= 1 AND prazo_retorno_dias <= 365)",
+            name="ck_tipo_consulta_prazo_retorno",
+        ),
+    )
+
+
+class IndisponibilidadeAgenda(Base):
+    __tablename__ = "indisponibilidades_agenda"
+
+    id = Column(Integer, primary_key=True)
+    clinica_id = Column(Integer, ForeignKey("clinicas.id"), nullable=False, index=True)
+    medico_id = Column(Integer, ForeignKey("medicos.id", ondelete="CASCADE"), nullable=True, index=True)
+    tipo = Column(String(20), nullable=False)
+    inicio = Column(DateTime, nullable=False)
+    fim = Column(DateTime, nullable=False)
+    motivo = Column(String(300), nullable=False)
+    criado_por_usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    criado_em = Column(DateTime(timezone=True), nullable=False)
+
+    clinica = relationship("Clinica", back_populates="indisponibilidades_agenda")
+    medico = relationship("Medico", back_populates="indisponibilidades_agenda")
+
+    __table_args__ = (
+        CheckConstraint("tipo IN ('ferias', 'feriado', 'bloqueio')", name="ck_indisponibilidade_tipo"),
+        CheckConstraint("fim > inicio", name="ck_indisponibilidade_intervalo"),
+        Index("ix_indisponibilidade_periodo", "clinica_id", "medico_id", "inicio", "fim"),
     )
 
 
@@ -206,15 +300,28 @@ class Agendamento(Base):
     medico_id = Column(Integer, ForeignKey("medicos.id"), nullable=False)
     data_hora = Column(DateTime, nullable=False)
     status = Column(String, default="Confirmado")
+    tipo_consulta_id = Column(Integer, ForeignKey("tipos_consulta.id"), nullable=True, index=True)
+    tipo_consulta_nome = Column(String(100), nullable=False, default="Consulta")
+    duracao_minutos = Column(Integer, nullable=False, default=30)
+    intervalo_minutos = Column(Integer, nullable=False, default=0)
+    retorno_de_agendamento_id = Column(Integer, ForeignKey("agendamentos.id"), nullable=True, index=True)
+    cancelado_em = Column(DateTime(timezone=True), nullable=True)
+    cancelado_por_usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    motivo_cancelamento = Column(String(500), nullable=True)
 
     clinica = relationship("Clinica", back_populates="agendamentos")
     paciente = relationship("Paciente", back_populates="agendamentos")
     medico = relationship("Medico", back_populates="agendamentos")
+    tipo_consulta = relationship("TipoConsulta", back_populates="agendamentos")
+    retorno_de = relationship("Agendamento", remote_side=[id], foreign_keys=[retorno_de_agendamento_id])
     avaliacao = relationship("Avaliacao", uselist=False, back_populates="agendamento")
     prontuarios = relationship("ProntuarioEntrada", back_populates="agendamento")
+    comunicacoes = relationship("Comunicacao", back_populates="agendamento")
 
     __table_args__ = (
         CheckConstraint("status IN ('Confirmado', 'Atendido', 'Cancelado')", name="ck_agendamentos_status"),
+        CheckConstraint("duracao_minutos >= 10 AND duracao_minutos <= 240", name="ck_agendamento_duracao"),
+        CheckConstraint("intervalo_minutos >= 0 AND intervalo_minutos <= 120", name="ck_agendamento_intervalo"),
         Index(
             "uq_agendamento_clinica_medico_horario_ativo",
             "clinica_id",
@@ -224,6 +331,79 @@ class Agendamento(Base):
             postgresql_where=text("status <> 'Cancelado'"),
             sqlite_where=text("status <> 'Cancelado'"),
         ),
+    )
+
+
+class ConfiguracaoComunicacao(Base):
+    __tablename__ = "configuracoes_comunicacao"
+
+    id = Column(Integer, primary_key=True)
+    clinica_id = Column(Integer, ForeignKey("clinicas.id", ondelete="CASCADE"), nullable=False, unique=True)
+    email_ativo = Column(Boolean, nullable=False, default=False)
+    email_remetente_nome = Column(String(160), nullable=False)
+    email_remetente = Column(String(254), nullable=True)
+    email_responder_para = Column(String(254), nullable=True)
+    whatsapp_ativo = Column(Boolean, nullable=False, default=False)
+    whatsapp_phone_number_id = Column(String(80), nullable=True)
+    whatsapp_numero_exibicao = Column(String(30), nullable=True)
+    whatsapp_codigo_pais = Column(String(3), nullable=False, default="55")
+    whatsapp_template_confirmacao = Column(String(100), nullable=False, default="confirmacao_consulta")
+    whatsapp_template_lembrete = Column(String(100), nullable=False, default="lembrete_consulta")
+    whatsapp_template_cancelamento = Column(String(100), nullable=False, default="cancelamento_consulta")
+    whatsapp_idioma = Column(String(12), nullable=False, default="pt_BR")
+    enviar_confirmacoes = Column(Boolean, nullable=False, default=True)
+    enviar_lembretes = Column(Boolean, nullable=False, default=True)
+    enviar_cancelamentos = Column(Boolean, nullable=False, default=True)
+    lembrete_antecedencia_horas = Column(Integer, nullable=False, default=24)
+    atualizado_por_usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True)
+    atualizado_em = Column(DateTime(timezone=True), nullable=False)
+
+    clinica = relationship("Clinica", back_populates="configuracao_comunicacao")
+
+    __table_args__ = (
+        CheckConstraint(
+            "lembrete_antecedencia_horas >= 1 AND lembrete_antecedencia_horas <= 168",
+            name="ck_comunicacao_lembrete_antecedencia",
+        ),
+        CheckConstraint("length(whatsapp_codigo_pais) >= 1", name="ck_comunicacao_codigo_pais"),
+    )
+
+
+class Comunicacao(Base):
+    __tablename__ = "comunicacoes"
+
+    id = Column(Integer, primary_key=True)
+    clinica_id = Column(Integer, ForeignKey("clinicas.id", ondelete="CASCADE"), nullable=False, index=True)
+    agendamento_id = Column(Integer, ForeignKey("agendamentos.id", ondelete="SET NULL"), nullable=True, index=True)
+    paciente_id = Column(Integer, ForeignKey("pacientes.id", ondelete="SET NULL"), nullable=True, index=True)
+    canal = Column(String(20), nullable=False)
+    evento = Column(String(30), nullable=False)
+    destinatario_hash = Column(String(64), nullable=True)
+    destinatario_resumo = Column(String(40), nullable=True)
+    status = Column(String(20), nullable=False, default="pendente", index=True)
+    tentativas = Column(Integer, nullable=False, default=0)
+    provedor_mensagem_id = Column(String(200), nullable=True)
+    ultimo_erro = Column(String(300), nullable=True)
+    criado_em = Column(DateTime(timezone=True), nullable=False)
+    ultima_tentativa_em = Column(DateTime(timezone=True), nullable=False)
+    enviado_em = Column(DateTime(timezone=True), nullable=True)
+
+    clinica = relationship("Clinica", back_populates="comunicacoes")
+    agendamento = relationship("Agendamento", back_populates="comunicacoes")
+
+    __table_args__ = (
+        CheckConstraint("canal IN ('email', 'whatsapp')", name="ck_comunicacoes_canal"),
+        CheckConstraint(
+            "evento IN ('confirmacao', 'lembrete', 'cancelamento', 'teste')",
+            name="ck_comunicacoes_evento",
+        ),
+        CheckConstraint("status IN ('pendente', 'enviado', 'falhou', 'ignorado')", name="ck_comunicacoes_status"),
+        CheckConstraint("tentativas >= 0 AND tentativas <= 10", name="ck_comunicacoes_tentativas"),
+        UniqueConstraint(
+            "clinica_id", "agendamento_id", "canal", "evento",
+            name="uq_comunicacao_agendamento_canal_evento",
+        ),
+        Index("ix_comunicacoes_clinica_criado", "clinica_id", "criado_em"),
     )
 
 
