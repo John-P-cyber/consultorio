@@ -58,7 +58,7 @@ jobs:
         run: echo "value=ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Build and publish image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
