@@ -14,6 +14,17 @@ Sistema web multiempresa para cadastro de pacientes e médicos, agendamentos, ex
 
 O FastAPI serve as páginas HTML e os assets necessários, portanto não é preciso iniciar um segundo servidor para o frontend.
 
+## CSS do frontend
+
+O portal usa um arquivo Tailwind compilado e versionado, sem carregar o Play CDN no navegador. Depois de alterar classes nos arquivos HTML ou JavaScript, regenere o asset de produção:
+
+```bash
+npm ci
+npm run build:css
+```
+
+O CI repete a compilação e falha quando `tailwind.css` não corresponde ao código-fonte.
+
 ## Banco existente criado antes do Alembic
 
 Se as tabelas já existiam antes da inclusão do Alembic, faça backup e confira se possuem `exames.resultado` e `usuarios.reset_version`. Depois marque a migration inicial e aplique as seguintes:
@@ -88,7 +99,7 @@ Consultas de prontuário por médicos e administradores exigem `motivo_acesso` (
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q
+python -m pytest -q
 ```
 
 A suíte usa SQLite isolado e cobre cookies HttpOnly, CSRF, rotação e replay de refresh token, revogação, TOTP, códigos de recuperação, autorização, reset de senha, conflito de agenda, privacidade médico–paciente, avaliações, isolamento entre clínicas, assinatura e versionamento de prontuário, anexos e prescrições.

@@ -44,6 +44,22 @@ def test_endpoints_operacionais_e_request_id(client):
     assert "clinica_database_ready 1.0" in metrics.text
 
 
+def test_documentos_lgpd_e_assets_frontend_sao_publicos(client):
+    documentos = client.get("/lgpd/documentos")
+    assert documentos.status_code == 200
+    assert documentos.json()["termos_versao"] == "2026-08-01"
+    assert documentos.json()["privacidade_versao"] == "2026-08-01"
+
+    cadastro = client.get("/register.html")
+    assert cadastro.status_code == 200
+    assert "cdn.tailwindcss.com" not in cadastro.text
+    assert 'href="tailwind.css"' in cadastro.text
+
+    estilos = client.get("/tailwind.css")
+    assert estilos.status_code == 200
+    assert estilos.headers["content-type"].startswith("text/css")
+
+
 @pytest.fixture()
 def client():
     main.models.Base.metadata.drop_all(bind=main.engine)

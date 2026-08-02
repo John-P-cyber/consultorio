@@ -12,3 +12,4 @@ tests
 tmp*
 uploads
 venv
+node_modules

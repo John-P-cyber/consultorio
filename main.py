@@ -2592,6 +2592,7 @@ for arquivo_frontend in (
     "login.html", "register.html", "recuperar-senha.html", "index.html",
     "paciente.html", "medico.html", "nova-clinica.html", "lgpd.html",
     "seguranca.html", "termos.html", "privacidade.html", "app.css", "app.js",
+    "tailwind.css",
 ):
     app.add_api_route(
         f"/{arquivo_frontend}",

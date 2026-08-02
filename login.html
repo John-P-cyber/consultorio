@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clínica Saúde - Login</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="tailwind.css">
     <link rel="stylesheet" href="app.css">
 </head>
 <body class="app-shell bg-gray-100 min-h-screen flex items-center justify-center font-sans p-5">
@@ -21,7 +21,7 @@
             <div>
                 <label for="clinica" class="block text-sm font-semibold text-gray-700">Código da clínica</label>
                 <input type="text" id="clinica" required autocomplete="organization" placeholder="ex.: clinica-centro"
-                       pattern="[a-z0-9-]+" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                       pattern="[a-z0-9]+(?:-[a-z0-9]+)*" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
                 <p class="text-xs text-gray-500 mt-1">Este código identifica o ambiente seguro da sua clínica.</p>
             </div>
             <div>

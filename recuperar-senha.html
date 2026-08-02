@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Recuperar senha | Clínica Saúde</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="tailwind.css">
     <link rel="stylesheet" href="app.css">
 </head>
 <body class="app-shell min-h-screen flex items-center justify-center font-sans p-5">
@@ -19,7 +19,7 @@
         <form id="form-solicitar" class="space-y-5">
             <div>
                 <label for="clinica" class="block text-sm font-semibold text-gray-700">Código da clínica</label>
-                <input type="text" id="clinica" required pattern="[a-z0-9-]+" placeholder="ex.: clinica-centro" class="mt-1 block w-full border rounded-lg p-3">
+                <input type="text" id="clinica" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="ex.: clinica-centro" class="mt-1 block w-full border rounded-lg p-3">
             </div>
             <div>
                 <label for="email" class="block text-sm font-semibold text-gray-700">E-mail cadastrado</label>
