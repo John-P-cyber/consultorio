@@ -18,6 +18,11 @@
 
         <form id="form-register" class="space-y-4">
             <div>
+                <label for="clinica" class="block text-sm font-semibold text-gray-700">Código da clínica</label>
+                <input type="text" id="clinica" required pattern="[a-z0-9-]+" placeholder="ex.: clinica-centro"
+                       class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+            </div>
+            <div>
                 <label class="block text-sm font-semibold text-gray-700">E-mail</label>
                 <input type="email" id="email" required placeholder="exemplo@clinica.com" 
                        class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
@@ -25,7 +30,7 @@
 
             <div>
                 <label class="block text-sm font-semibold text-gray-700">Palavra-passe</label>
-                <input type="password" id="password" required placeholder="Mín. 8 caracteres" 
+                <input type="password" id="password" minlength="8" required placeholder="Mín. 8 caracteres, letras e números"
                        class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
             </div>
 
@@ -35,15 +40,37 @@
                        class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
             </div>
 
-            <div>
-                <label class="block text-sm font-semibold text-gray-700">Perfil</label>
-                <select id="role" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
-                    <option value="paciente" selected>Paciente</option>
-                    <option value="medico">Médico</option>
-                </select>
+            <input type="hidden" id="role" value="paciente">
+
+            <div class="border-t border-gray-200 pt-4 space-y-3">
+                <h2 class="text-sm font-semibold text-gray-700">Dados pessoais</h2>
+                <div class="grid grid-cols-1 gap-3">
+                    <input type="text" id="nome" placeholder="Nome completo" required class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <input type="text" id="cpf" placeholder="CPF" required class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <input type="tel" id="telefone" placeholder="Telefone" required class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <input type="date" id="data_nascimento" required class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <input type="text" id="endereco_rua" placeholder="Rua" required class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <input type="text" id="endereco_numero" placeholder="Número" required class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <input type="text" id="endereco_bairro" placeholder="Bairro" required class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <input type="text" id="endereco_cidade" placeholder="Cidade" required class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <input type="text" id="endereco_estado" placeholder="Estado" required class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <input type="text" id="endereco_cep" placeholder="CEP" required onblur="buscarCepCadastro(this.value)" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                </div>
             </div>
 
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition shadow-md hover:shadow-lg">
+            <fieldset class="border-t border-gray-200 pt-4 space-y-3">
+                <legend class="text-sm font-semibold text-gray-700 mb-2">Privacidade e condições de uso</legend>
+                <label class="flex items-start gap-3 text-sm text-gray-600">
+                    <input type="checkbox" id="aceita_termos" required class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600">
+                    <span>Li e aceito os <a id="link-termos" href="termos.html" target="_blank" class="font-semibold text-blue-700 hover:underline">Termos de Uso</a>.</span>
+                </label>
+                <label class="flex items-start gap-3 text-sm text-gray-600">
+                    <input type="checkbox" id="ciente_privacidade" required class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600">
+                    <span>Declaro ciência da <a id="link-privacidade" href="privacidade.html" target="_blank" class="font-semibold text-blue-700 hover:underline">Política de Privacidade</a> e do tratamento de dados de saúde.</span>
+                </label>
+            </fieldset>
+
+            <button type="submit" id="botao-cadastrar" disabled class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-lg transition shadow-md hover:shadow-lg">
                 Criar Conta
             </button>
         </form>
@@ -56,15 +83,58 @@
         <p id="msg-sucesso" class="text-green-600 text-sm font-semibold mt-4 text-center hidden"></p>
     </div>
 
-    <script>
-        const API_URL = "http://127.0.0.1:8000";
+        <script>
+        const API_URL = window.location.origin;
+        let documentosLgpd = null;
+        fetch(`${API_URL}/lgpd/documentos`).then(resposta => resposta.json()).then(dados => {
+            documentosLgpd = dados;
+            document.getElementById('link-termos').href = dados.termos_url;
+            document.getElementById('link-privacidade').href = dados.privacidade_url;
+            document.getElementById('botao-cadastrar').disabled = false;
+        }).catch(() => {
+            document.getElementById('msg-erro').textContent = 'Não foi possível carregar os documentos de privacidade.';
+            document.getElementById('msg-erro').classList.remove('hidden');
+        });
+        const clinicaSalva = localStorage.getItem('clinica_slug');
+        if (clinicaSalva) document.getElementById('clinica').value = clinicaSalva;
+
+        async function buscarCepCadastro(cep) {
+            const cepLimpo = cep.replace(/\D/g, '');
+            if (cepLimpo.length !== 8) return;
+
+            try {
+                const resposta = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+                const dados = await resposta.json();
+                if (dados.erro) {
+                    return;
+                }
+
+                document.getElementById('endereco_rua').value = dados.logradouro || '';
+                document.getElementById('endereco_bairro').value = dados.bairro || '';
+                document.getElementById('endereco_cidade').value = dados.localidade || '';
+                document.getElementById('endereco_estado').value = dados.uf || '';
+            } catch (err) {
+                console.error('Erro ao buscar CEP', err);
+            }
+        }
 
         document.getElementById('form-register').addEventListener('submit', async function(e) {
             e.preventDefault();
             const email = document.getElementById('email').value.trim();
+            const clinicaSlug = document.getElementById('clinica').value.trim().toLowerCase();
             const password = document.getElementById('password').value;
             const confirm = document.getElementById('confirm_password').value;
             const role = document.getElementById('role').value;
+            const nome = document.getElementById('nome').value.trim();
+            const cpf = document.getElementById('cpf').value.trim();
+            const telefone = document.getElementById('telefone').value.trim();
+            const dataNascimento = document.getElementById('data_nascimento').value;
+            const enderecoRua = document.getElementById('endereco_rua').value.trim();
+            const enderecoNumero = document.getElementById('endereco_numero').value.trim();
+            const enderecoBairro = document.getElementById('endereco_bairro').value.trim();
+            const enderecoCidade = document.getElementById('endereco_cidade').value.trim();
+            const enderecoEstado = document.getElementById('endereco_estado').value.trim();
+            const enderecoCep = document.getElementById('endereco_cep').value.trim();
             const msgErro = document.getElementById('msg-erro');
             const msgSucesso = document.getElementById('msg-sucesso');
 
@@ -81,20 +151,41 @@
                 return;
             }
 
+            const payload = {
+                clinica_slug: clinicaSlug,
+                email,
+                password,
+                role,
+                aceita_termos: document.getElementById('aceita_termos').checked,
+                ciente_privacidade: document.getElementById('ciente_privacidade').checked,
+                termos_versao: documentosLgpd?.termos_versao,
+                privacidade_versao: documentosLgpd?.privacidade_versao,
+                nome,
+                cpf,
+                telefone,
+                data_nascimento: dataNascimento || undefined,
+                endereco_rua: enderecoRua,
+                endereco_numero: enderecoNumero,
+                endereco_bairro: enderecoBairro,
+                endereco_cidade: enderecoCidade,
+                endereco_estado: enderecoEstado,
+                endereco_cep: enderecoCep,
+            };
             try {
                 const resposta = await fetch(`${API_URL}/auth/registrar`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password, role })
+                    body: JSON.stringify(payload)
                 });
 
                 if (resposta.ok) {
+                    localStorage.setItem('clinica_slug', clinicaSlug);
                     msgSucesso.textContent = 'Conta criada com sucesso. A redirecionar para o login...';
                     msgSucesso.classList.remove('hidden');
                     setTimeout(() => window.location.href = 'login.html', 1400);
                 } else {
                     const erro = await resposta.json();
-                    msgErro.textContent = erro.detail || 'Erro ao criar conta.';
+                    msgErro.textContent = mensagemErroAPI(erro);
                     msgErro.classList.remove('hidden');
                 }
             } catch (err) {

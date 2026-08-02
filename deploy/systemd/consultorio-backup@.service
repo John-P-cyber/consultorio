@@ -1,0 +1,17 @@
+[Unit]
+Description=Consultorio backup and restore verification (%i)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/consultorio
+ExecStart=/opt/consultorio/deploy/backup-cycle.sh %i
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

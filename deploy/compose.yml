@@ -1,0 +1,191 @@
+name: ${COMPOSE_PROJECT_NAME:-consultorio}
+
+x-app-base: &app-base
+  image: ${APP_IMAGE:-consultorio-api:local}
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  env_file:
+    - ${APP_ENV_FILE:-./env/production.env}
+  environment:
+    RELEASE_SHA: ${RELEASE_SHA:-local}
+  networks:
+    - backend
+    - egress
+
+services:
+  app:
+    <<: *app-base
+    restart: unless-stopped
+    stop_grace_period: 30s
+    mem_limit: ${APP_MEMORY_LIMIT:-1g}
+    cpus: ${APP_CPU_LIMIT:-1.0}
+    pids_limit: 256
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - prontuario_uploads:/app/uploads
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  migrate:
+    <<: *app-base
+    profiles: ["tools"]
+    command: ["alembic", "upgrade", "head"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    stop_grace_period: 30s
+    mem_limit: 256m
+    pids_limit: 128
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Defina APP_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      app:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  backup:
+    image: postgres:18.4-alpine
+    profiles: ["tools"]
+    env_file:
+      - ${APP_ENV_FILE:-./env/production.env}
+    environment:
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    command: ["sh", "/scripts/backup.sh"]
+    volumes:
+      - ./backup:/scripts:ro
+      - database_backups:/backups
+    networks:
+      - backend
+      - egress
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  backup-verifier-db:
+    image: postgres:18.4-alpine
+    profiles: ["tools"]
+    environment:
+      POSTGRES_DB: consultorio_restore_verify
+      POSTGRES_USER: verifier
+      POSTGRES_PASSWORD: backup-verify-only
+    tmpfs:
+      - /var/lib/postgresql:size=512m
+    networks:
+      - backup-verification
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verifier -d consultorio_restore_verify"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  verify-backup:
+    image: postgres:18.4-alpine
+    profiles: ["tools"]
+    environment:
+      BACKUP_DIR: /backups
+      VERIFY_DATABASE_URL: postgresql://verifier:backup-verify-only@backup-verifier-db:5432/consultorio_restore_verify
+      VERIFY_DATABASE_NAME: consultorio_restore_verify
+    command: ["sh", "/scripts/verify-restore.sh"]
+    volumes:
+      - ./backup:/scripts:ro
+      - database_backups:/backups:ro
+    networks:
+      - backup-verification
+    depends_on:
+      backup-verifier-db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  backup-offsite:
+    image: restic/restic:0.18.1
+    profiles: ["tools"]
+    env_file:
+      - ${BACKUP_ENV_FILE:-./env/backup-production.env}
+    environment:
+      BACKUP_DIR: /backups
+      RESTIC_CACHE_DIR: /tmp/restic-cache
+      APP_ENV: ${DEPLOY_ENVIRONMENT:-production}
+    entrypoint: ["sh", "/scripts/restic-backup.sh"]
+    volumes:
+      - ./backup:/scripts:ro
+      - database_backups:/backups:ro
+      - prontuario_uploads:/uploads:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - egress
+
+networks:
+  frontend:
+  backend:
+    internal: true
+  egress:
+  backup-verification:
+    internal: true
+
+volumes:
+  prontuario_uploads:
+  caddy_data:
+  caddy_config:
+  database_backups:

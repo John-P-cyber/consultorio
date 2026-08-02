@@ -1,0 +1,70 @@
+name: consultorio-backup-test
+
+services:
+  source-db:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: consultorio_ci
+      POSTGRES_USER: ci
+      POSTGRES_PASSWORD: ci-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ci -d consultorio_ci"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  migrate:
+    image: consultorio-api:ci
+    environment: &app-environment
+      APP_ENV: test
+      DATABASE_URL: postgresql+psycopg2://ci:ci-password@source-db:5432/consultorio_ci
+      SECRET_KEY: ci-secret-key-with-at-least-32-characters
+      MFA_MASTER_KEY: ci-mfa-key-different-with-at-least-32-characters
+      CLINIC_PROVISIONING_TOKEN: ci-provisioning-token-with-at-least-32-characters
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      source-db:
+        condition: service_healthy
+
+  backup:
+    image: postgres:18.4-alpine
+    environment:
+      <<: *app-environment
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: 1
+    command: ["sh", "/scripts/backup.sh"]
+    volumes:
+      - ./backup:/scripts:ro
+      - backup_test_data:/backups
+    depends_on:
+      source-db:
+        condition: service_healthy
+
+  restore-db:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: consultorio_restore_verify
+      POSTGRES_USER: verifier
+      POSTGRES_PASSWORD: verify-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verifier -d consultorio_restore_verify"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  verify:
+    image: postgres:18.4-alpine
+    environment:
+      BACKUP_DIR: /backups
+      VERIFY_DATABASE_URL: postgresql://verifier:verify-password@restore-db:5432/consultorio_restore_verify
+      VERIFY_DATABASE_NAME: consultorio_restore_verify
+    command: ["sh", "/scripts/verify-restore.sh"]
+    volumes:
+      - ./backup:/scripts:ro
+      - backup_test_data:/backups:ro
+    depends_on:
+      restore-db:
+        condition: service_healthy
+
+volumes:
+  backup_test_data:

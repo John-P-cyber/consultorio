@@ -17,6 +17,8 @@
         </div>
         <div class="flex items-center gap-4">
             <span id="nome-paciente-topo" class="font-semibold text-gray-600">A carregar perfil...</span>
+            <a href="seguranca.html" class="text-sm font-semibold text-blue-700 hover:underline">Segurança</a>
+            <a href="lgpd.html" class="text-sm font-semibold text-blue-700 hover:underline">Privacidade</a>
             <button onclick="terminarSessao()" class="bg-red-50 hover:bg-red-500 text-red-600 hover:text-white font-bold py-1.5 px-4 rounded-lg transition text-sm">
                 Sair
             </button>
@@ -82,6 +84,12 @@
                     </ul>
                 </div>
 
+                <div class="bg-blue-900 p-6 rounded-2xl shadow-sm text-white">
+                    <h2 class="text-lg font-bold">Meu prontuário</h2>
+                    <p class="text-sm text-blue-100 mt-2">Consulte registros clínicos, versões, anexos e prescrições compartilhados com você.</p>
+                    <button onclick="abrirMeuProntuario()" class="mt-4 w-full bg-white text-blue-900 font-bold py-2.5 rounded-lg hover:bg-blue-50">Abrir prontuário</button>
+                </div>
+
             </div>
 
         </div>
@@ -142,49 +150,27 @@
         </div>
     </div>
 
+    <div id="modal-meu-prontuario" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-3xl max-h-[88vh] flex flex-col">
+            <div class="flex justify-between items-start border-b pb-3 mb-4"><div><h2 class="text-xl font-bold text-gray-800">Meu prontuário clínico</h2><p class="text-sm text-gray-500 mt-1">Histórico preservado com autoria, data, versões e integridade.</p></div><button onclick="fecharMeuProntuario()" class="text-3xl text-gray-400 hover:text-red-600">&times;</button></div>
+            <div id="timeline-meu-prontuario" class="overflow-y-auto space-y-4 pr-2"><p class="text-sm text-gray-500">Carregando...</p></div>
+        </div>
+    </div>
+
     <script>
-        const API_URL = "http://127.0.0.1:8000";
-        const fetchOriginal = window.fetch.bind(window);
-        window.fetch = (input, init = {}) => {
-            const url = typeof input === 'string' ? input : input.url;
-            if (!url.startsWith(API_URL)) return fetchOriginal(input, init);
-            const headers = new Headers(init.headers || {});
-            const token = localStorage.getItem('token');
-            if (token) headers.set('Authorization', `Bearer ${token}`);
-            return fetchOriginal(input, { ...init, headers });
-        };
+        const API_URL = window.location.origin;
         let pacienteLogado = null;
 
         // VERIFICAR AUTENTICAÇÃO AO ENTRAR
-        function verificarAcesso() {
-            const token = localStorage.getItem('token');
-            const role = localStorage.getItem('role');
-            if (!token || role !== 'paciente') {
-                alert("Acesso negado. Por favor, inicie sessão.");
-                window.location.href = "login.html";
-            }
-        }
-
-        function obterEmailDoToken() {
-            const token = localStorage.getItem('token');
-            if (!token) return null;
-            try {
-                const payloadBase64 = token.split('.')[1];
-                const payloadDecodificado = JSON.parse(atob(payloadBase64));
-                return payloadDecodificado.sub; 
-            } catch (e) { return null; }
-        }
+        async function verificarAcesso() { return window.exigirSessao('paciente'); }
 
         // CARREGAR PERFIL DO PACIENTE
         async function carregarPerfil() {
-            const email = obterEmailDoToken();
-            if (!email) return;
-
             try {
                 const resposta = await fetch(`${API_URL}/pacientes/`);
                 const pacientes = await resposta.json();
                 
-                pacienteLogado = pacientes.find(p => p.email === email);
+                pacienteLogado = pacientes[0] || null;
 
                 if (pacienteLogado) {
                     document.getElementById('nome-paciente-topo').textContent = pacienteLogado.nome;
@@ -216,9 +202,9 @@
                     lista.innerHTML += `
                         <div class="border border-gray-100 p-4 rounded-xl bg-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-md transition">
                             <div>
-                                <span class="font-bold text-gray-800 text-lg block">${m.nome}</span>
-                                <span class="text-sm text-blue-600 font-semibold block">${m.especialidade} (CRM: ${m.crm})</span>
-                                <span class="text-xs text-gray-500 block mt-1">📍 Localização: ${m.morada}</span>
+                                <span class="font-bold text-gray-800 text-lg block">${escapeHTML(m.nome)}</span>
+                                <span class="text-sm text-blue-600 font-semibold block">${escapeHTML(m.especialidade)} (CRM: ${escapeHTML(m.crm)})</span>
+                                <span class="text-xs text-gray-500 block mt-1">📍 Localização: ${escapeHTML(m.morada)}</span>
                             </div>
                             <div class="flex flex-col items-end gap-2 self-end md:self-auto w-full md:w-auto">
                                 <div class="text-right">
@@ -227,7 +213,7 @@
                                     </span>
                                     <span class="text-xs text-gray-500 block mt-1">A ${m.distancia_km} km de si</span>
                                 </div>
-                                <button onclick="abrirModalAgendar(${m.id}, '${m.nome}')" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition">
+                                <button onclick="abrirModalAgendar(${m.id}, '${encodeURIComponent(m.nome).replace(/'/g, '%27')}')" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition">
                                     📅 Marcar Consulta
                                 </button>
                             </div>
@@ -239,6 +225,7 @@
 
         // LÓGICA DE AGENDAR CONSULTA
         function abrirModalAgendar(medicoId, medicoNome) {
+            medicoNome = decodeURIComponent(medicoNome);
             document.getElementById('ag-medico-id').value = medicoId;
             document.getElementById('ag-nome-medico').textContent = medicoNome;
             document.getElementById('ag-data').value = "";
@@ -343,8 +330,8 @@
 
                     lista.innerHTML += `
                         <li class="border border-gray-100 p-4 rounded-xl bg-gray-50 shadow-sm">
-                            <div class="font-bold text-gray-800">${medico ? medico.nome : 'Médico'}</div>
-                            <div class="text-xs text-gray-500">${medico ? medico.especialidade : ''}</div>
+                            <div class="font-bold text-gray-800">${escapeHTML(medico ? medico.nome : 'Médico')}</div>
+                            <div class="text-xs text-gray-500">${escapeHTML(medico ? medico.especialidade : '')}</div>
                             <div class="text-sm text-gray-700 font-semibold mt-2">📅 ${dataFormatada}</div>
                             <div class="flex justify-between items-center mt-3">
                                 <span class="inline-block px-2.5 py-0.5 rounded-full border text-xs font-bold ${badgeColor}">
@@ -408,10 +395,11 @@
                     const dataFormatada = new Date(ex.data_hora).toLocaleString('pt-PT', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
                     lista.innerHTML += `
                         <li class="border border-purple-100 p-4 rounded-xl bg-purple-50 shadow-sm">
-                            <div class="font-bold text-purple-900">${ex.tipo_exame}</div>
-                            <div class="text-xs text-purple-700">🧪 Lab: ${ex.laboratorio}</div>
+                            <div class="font-bold text-purple-900">${escapeHTML(ex.tipo_exame)}</div>
+                            <div class="text-xs text-purple-700">🧪 Lab: ${escapeHTML(ex.laboratorio)}</div>
                             <div class="text-sm text-gray-700 font-semibold mt-2">📅 ${dataFormatada}</div>
                             <span class="inline-block px-2.5 py-0.5 rounded-full bg-purple-200 text-purple-800 border border-purple-300 text-xs font-bold mt-2">${ex.status}</span>
+                            ${ex.resultado ? `<div class="mt-3 pt-3 border-t border-purple-200"><span class="text-xs font-bold text-purple-800 uppercase">Resultado</span><p class="text-sm text-gray-800 whitespace-pre-wrap mt-1">${escapeHTML(ex.resultado)}</p></div>` : ''}
                         </li>
                     `;
                 });
@@ -435,7 +423,7 @@
             const dados = {
                 agendamento_id: parseInt(document.getElementById('av-agendamento-id').value), paciente_id: pacienteLogado.id,
                 medico_id: parseInt(document.getElementById('av-medico-id').value), nota_medico: parseInt(document.getElementById('av-nota').value),
-                comentario_paciente: document.getElementById('av-comentario').value, nota_paciente: 5, comentario_medico: "Avaliado pelo paciente."
+                comentario_paciente: document.getElementById('av-comentario').value
             };
             try {
                 const res = await fetch(`${API_URL}/avaliacoes/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
@@ -443,12 +431,44 @@
             } catch (error) {}
         });
 
-        function terminarSessao() {
-            localStorage.clear();
-            window.location.href = "login.html";
+        async function abrirMeuProntuario() {
+            if (!pacienteLogado) return alert('O perfil ainda está sendo carregado.');
+            const modal = document.getElementById('modal-meu-prontuario');
+            const timeline = document.getElementById('timeline-meu-prontuario');
+            modal.classList.remove('hidden'); timeline.innerHTML = '<p class="text-sm text-gray-500">Carregando prontuário...</p>';
+            try {
+                const [resProntuario, resPrescricoes] = await Promise.all([
+                    fetch(`${API_URL}/prontuarios`), fetch(`${API_URL}/prescricoes`)
+                ]);
+                if (!resProntuario.ok || !resPrescricoes.ok) throw new Error('Não foi possível consultar o prontuário.');
+                const registros = await resProntuario.json();
+                const prescricoes = await resPrescricoes.json();
+                timeline.innerHTML = '';
+                if (!registros.length) timeline.innerHTML = '<p class="text-center text-gray-500 italic py-8">Ainda não há registros clínicos disponíveis.</p>';
+                registros.forEach(reg => {
+                    const anexos = (reg.anexos || []).map(a => `<button onclick="baixarMeuAnexo(${a.id}, '${encodeURIComponent(a.nome_original)}')" class="text-xs font-bold text-blue-700 hover:underline">📎 ${escapeHTML(a.nome_original)}</button>`).join('');
+                    timeline.innerHTML += `<article class="border border-gray-200 rounded-xl p-4 bg-gray-50"><div class="flex flex-wrap justify-between gap-2"><div><strong>${escapeHTML(reg.autor_nome)}</strong><span class="text-xs text-gray-500"> · ${escapeHTML(reg.autor_crm)}</span></div><span class="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded-full">versão ${reg.versao}</span></div><p class="text-xs text-gray-500 mt-1">${new Date(reg.criado_em).toLocaleString('pt-BR')} · ${escapeHTML(reg.tipo)}</p>${reg.motivo_retificacao ? `<p class="text-xs text-amber-900 bg-amber-50 p-2 rounded mt-3"><strong>Retificação:</strong> ${escapeHTML(reg.motivo_retificacao)}</p>` : ''}<pre class="whitespace-pre-wrap font-sans text-sm text-gray-800 mt-3">${escapeHTML(reg.conteudo)}</pre><div class="flex gap-3 mt-3 pt-3 border-t">${anexos}<span class="text-xs text-emerald-700">${reg.assinatura_hash ? '✓ Assinado internamente' : 'Registro legado migrado'}</span></div></article>`;
+                });
+                if (prescricoes.length) {
+                    timeline.innerHTML += '<h3 class="font-bold text-gray-900 border-t pt-4">Prescrições</h3>';
+                    prescricoes.forEach(rx => {
+                        const cancelada = (rx.eventos || []).some(ev => ev.tipo === 'cancelamento');
+                        timeline.innerHTML += `<article class="border rounded-xl p-4 ${cancelada ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-blue-50'}"><div class="flex justify-between"><strong>${escapeHTML(rx.autor_nome)} · ${escapeHTML(rx.autor_crm)}</strong><span class="text-xs font-bold ${cancelada ? 'text-red-700' : 'text-blue-700'}">${cancelada ? 'Cancelada' : 'Ativa no sistema'}</span></div>${rx.itens.map(item => `<p class="text-sm mt-3"><strong>${escapeHTML(item.medicamento)}</strong> ${escapeHTML(item.concentracao || '')}<br>${escapeHTML(item.dose)} · ${escapeHTML(item.via)} · ${escapeHTML(item.frequencia)} · ${escapeHTML(item.duracao)}</p>`).join('')}<p class="text-xs text-amber-800 mt-3">Documento com assinatura interna; confirme com a clínica a emissão externa aplicável.</p></article>`;
+                    });
+                }
+            } catch (error) { timeline.innerHTML = `<p class="text-red-600 font-bold text-center py-8">${escapeHTML(error.message)}</p>`; }
+        }
+        function fecharMeuProntuario() { document.getElementById('modal-meu-prontuario').classList.add('hidden'); }
+        async function baixarMeuAnexo(anexoId, nomeCodificado) {
+            const res = await fetch(`${API_URL}/prontuarios/anexos/${anexoId}`);
+            if (!res.ok) return alert('Não foi possível baixar o anexo.');
+            const url = URL.createObjectURL(await res.blob()); const link = document.createElement('a');
+            link.href = url; link.download = decodeURIComponent(nomeCodificado); link.click(); URL.revokeObjectURL(url);
         }
 
-        window.onload = () => { verificarAcesso(); carregarPerfil(); };
+        async function terminarSessao() { await window.encerrarSessao(); }
+
+        window.onload = async () => { if (await verificarAcesso()) carregarPerfil(); };
     </script>
     <script src="app.js"></script>
 </body>

@@ -1,0 +1,151 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Destination environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
+      - run: python -m compileall -q .
+      - run: pytest -q
+
+  build:
+    needs: quality
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.image.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: image
+        name: Resolve immutable image tag
+        shell: bash
+        run: echo "value=ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.value }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+  verify-release:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Load published image
+        run: |
+          docker pull "${{ needs.build.outputs.image }}"
+          docker tag "${{ needs.build.outputs.image }}" consultorio-api:ci
+      - name: Validate migrations and backup restoration
+        run: |
+          docker compose -f deploy/compose.backup-test.yml up -d source-db restore-db
+          docker compose -f deploy/compose.backup-test.yml run --rm migrate
+          docker compose -f deploy/compose.backup-test.yml run --rm migrate alembic check
+          docker compose -f deploy/compose.backup-test.yml run --rm backup
+          docker compose -f deploy/compose.backup-test.yml run --rm verify
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f deploy/compose.backup-test.yml logs --no-color
+      - name: Clean validation containers
+        if: always()
+        run: docker compose -f deploy/compose.backup-test.yml down -v
+
+  deploy:
+    needs: [build, verify-release]
+    runs-on: ubuntu-24.04
+    environment: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Copy deployment configuration
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          tar -czf deploy.tar.gz deploy
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
+          scp deploy.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/deploy.tar.gz"
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "tar -xzf '$DEPLOY_PATH/deploy.tar.gz' -C '$DEPLOY_PATH' && rm '$DEPLOY_PATH/deploy.tar.gz'"
+
+      - name: Authenticate server to GHCR
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | ssh "$DEPLOY_USER@$DEPLOY_HOST" "docker login ghcr.io --username '$GHCR_USER' --password-stdin"
+
+      - name: Deploy and run health checks
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          COMPOSE_ENV_FILE: ${{ vars.COMPOSE_ENV_FILE }}
+          APP_IMAGE: ${{ needs.build.outputs.image }}
+          TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+        run: |
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$DEPLOY_PATH' && APP_IMAGE='$APP_IMAGE' RELEASE_SHA='$GITHUB_SHA' COMPOSE_ENV_FILE='$COMPOSE_ENV_FILE' sh deploy/deploy.sh '$TARGET_ENV'"

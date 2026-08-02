@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Central de Privacidade | Clínica Saúde</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body class="app-shell min-h-screen font-sans text-gray-800">
+    <nav class="bg-white border-b border-gray-200 px-5 sm:px-8 py-4 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3"><span class="brand-mark" aria-hidden="true">+</span><span class="text-xl font-bold text-blue-800">Central de Privacidade</span></div>
+        <a id="voltar" href="login.html" class="text-sm font-semibold text-blue-700 hover:underline">Voltar ao portal</a>
+    </nav>
+
+    <main class="max-w-6xl mx-auto p-5 sm:p-8 space-y-6">
+        <header class="bg-blue-950 text-white rounded-2xl p-7 sm:p-9">
+            <p class="text-blue-200 text-xs uppercase tracking-widest font-bold">LGPD e transparência</p>
+            <h1 class="text-3xl font-extrabold mt-2">Seus dados, direitos e registros</h1>
+            <p class="text-blue-100 mt-3 max-w-3xl">Consulte documentos vigentes, gerencie consentimentos e acompanhe solicitações. Operações sensíveis são registradas na trilha de auditoria da clínica.</p>
+        </header>
+
+        <section class="grid md:grid-cols-3 gap-4">
+            <a id="termos" href="termos.html" target="_blank" class="bg-white border border-gray-200 rounded-xl p-5 hover:border-blue-400"><p class="text-xs font-bold text-blue-600 uppercase">Documento</p><h2 class="font-bold text-lg mt-1">Termos de Uso</h2><p id="versao-termos" class="text-sm text-gray-500 mt-2">Carregando versão...</p></a>
+            <a id="privacidade" href="privacidade.html" target="_blank" class="bg-white border border-gray-200 rounded-xl p-5 hover:border-blue-400"><p class="text-xs font-bold text-blue-600 uppercase">Documento</p><h2 class="font-bold text-lg mt-1">Política de Privacidade</h2><p id="versao-privacidade" class="text-sm text-gray-500 mt-2">Carregando versão...</p></a>
+            <div class="bg-white border border-gray-200 rounded-xl p-5"><p class="text-xs font-bold text-blue-600 uppercase">Retenção</p><h2 class="font-bold text-lg mt-1">Prontuário clínico</h2><p id="retencao" class="text-sm text-gray-500 mt-2">Carregando política...</p></div>
+        </section>
+
+        <section class="bg-white border border-gray-200 rounded-2xl p-6">
+            <div class="flex flex-wrap items-center justify-between gap-3"><div><h2 class="text-xl font-bold text-blue-950">Consentimentos e ciência</h2><p class="text-sm text-gray-500 mt-1">Histórico versionado das suas manifestações.</p></div><div class="flex gap-2"><button id="aceitar-documentos" class="hidden bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold px-4 py-2 rounded-lg">Registrar aceite atual</button><button id="aceitar-comunicacoes" class="hidden bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg">Autorizar comunicações</button></div></div>
+            <div id="lista-consentimentos" class="mt-5 space-y-3"><p class="text-sm text-gray-500">Carregando...</p></div>
+        </section>
+
+        <section id="painel-paciente" class="hidden grid lg:grid-cols-2 gap-6">
+            <div class="bg-white border border-gray-200 rounded-2xl p-6">
+                <h2 class="text-xl font-bold text-blue-950">Exportar meus dados</h2>
+                <p class="text-sm text-gray-500 mt-2">Baixe uma cópia em JSON dos seus dados cadastrais, consultas, exames, registros e consentimentos.</p>
+                <button id="exportar" class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-lg">Baixar minha cópia</button>
+            </div>
+            <div class="bg-white border border-gray-200 rounded-2xl p-6">
+                <h2 class="text-xl font-bold text-blue-950">Exercer um direito</h2>
+                <p class="text-sm text-gray-500 mt-2">Pedidos de anonimização ou exclusão passam por análise das obrigações de guarda.</p>
+                <form id="form-solicitacao" class="mt-4 space-y-3">
+                    <select id="tipo-solicitacao" required class="w-full border border-gray-300 rounded-lg p-3"><option value="correcao">Correção de dados</option><option value="anonimizacao">Anonimização cadastral</option><option value="exclusao">Exclusão, quando legalmente possível</option></select>
+                    <textarea id="justificativa" maxlength="2000" rows="3" placeholder="Descreva seu pedido" class="w-full border border-gray-300 rounded-lg p-3"></textarea>
+                    <button class="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2.5 rounded-lg">Enviar solicitação</button>
+                </form>
+            </div>
+        </section>
+
+        <section id="secao-solicitacoes" class="hidden bg-white border border-gray-200 rounded-2xl p-6">
+            <h2 class="text-xl font-bold text-blue-950">Solicitações LGPD</h2>
+            <div id="lista-solicitacoes" class="mt-5 overflow-x-auto"></div>
+        </section>
+
+        <section id="painel-auditoria" class="hidden bg-white border border-gray-200 rounded-2xl p-6">
+            <div class="flex items-center justify-between"><div><h2 class="text-xl font-bold text-blue-950">Trilha de auditoria</h2><p class="text-sm text-gray-500 mt-1">Últimas 100 operações sensíveis desta clínica.</p></div><button id="atualizar-auditoria" class="text-sm font-bold text-blue-700">Atualizar</button></div>
+            <div id="tabela-auditoria" class="mt-5 overflow-x-auto"></div>
+        </section>
+
+        <p id="mensagem" class="hidden text-sm font-semibold text-center" role="status"></p>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        const API_URL = window.location.origin;
+        let role = null;
+        let documentosAtuais = null;
+        const cabecalhos = (json = false) => json ? {'Content-Type': 'application/json'} : {};
+        const mensagem = document.getElementById('mensagem');
+        const avisar = (texto, erro = false) => { mensagem.textContent = texto; mensagem.className = `text-sm font-semibold text-center ${erro ? 'text-red-600' : 'text-green-700'}`; };
+        const formatarData = valor => valor ? new Date(valor).toLocaleString('pt-BR') : '—';
+
+        async function carregarDocumentos() {
+            const dados = await fetch(`${API_URL}/lgpd/documentos`).then(r => r.json());
+            documentosAtuais = dados;
+            document.getElementById('termos').href = dados.termos_url;
+            document.getElementById('privacidade').href = dados.privacidade_url;
+            document.getElementById('versao-termos').textContent = `Versão ${dados.termos_versao}`;
+            document.getElementById('versao-privacidade').textContent = `Versão ${dados.privacidade_versao}`;
+            document.getElementById('retencao').textContent = `Mínimo de ${dados.retencao_prontuario_anos} anos após o último registro.`;
+        }
+
+        async function carregarConsentimentos() {
+            const resposta = await fetch(`${API_URL}/lgpd/consentimentos`, {headers: cabecalhos()});
+            const itens = await resposta.json();
+            if (!resposta.ok) throw new Error(mensagemErroAPI(itens));
+            const ativo = itens.find(item => item.documento_tipo === 'comunicacoes' && !item.revogado_em);
+            const termosAtual = itens.some(item => item.documento_tipo === 'termos_uso' && item.versao === documentosAtuais?.termos_versao);
+            const privacidadeAtual = itens.some(item => item.documento_tipo === 'politica_privacidade' && item.versao === documentosAtuais?.privacidade_versao);
+            document.getElementById('aceitar-documentos').classList.toggle('hidden', termosAtual && privacidadeAtual);
+            document.getElementById('aceitar-comunicacoes').classList.toggle('hidden', Boolean(ativo));
+            document.getElementById('lista-consentimentos').innerHTML = itens.length ? itens.map(item => `
+                <div class="flex flex-wrap items-center justify-between gap-3 border border-gray-200 rounded-lg p-4">
+                    <div><p class="font-semibold">${escapeHTML(item.documento_tipo.replaceAll('_', ' '))}</p><p class="text-xs text-gray-500">Versão ${escapeHTML(item.versao)} · ${formatarData(item.aceito_em)} · ${item.revogado_em ? 'Revogado' : 'Ativo'}</p></div>
+                    ${item.documento_tipo === 'comunicacoes' && !item.revogado_em ? `<button onclick="revogarConsentimento(${item.id})" class="text-sm font-bold text-red-600">Revogar</button>` : ''}
+                </div>`).join('') : '<p class="text-sm text-gray-500">Nenhum registro encontrado.</p>';
+        }
+
+        document.getElementById('aceitar-comunicacoes').onclick = async () => {
+            const resposta = await fetch(`${API_URL}/lgpd/consentimentos/comunicacoes`, {method:'POST', headers:cabecalhos(true), body:JSON.stringify({})});
+            const dados = await resposta.json(); avisar(resposta.ok ? 'Consentimento registrado.' : mensagemErroAPI(dados), !resposta.ok); if (resposta.ok) carregarConsentimentos();
+        };
+        document.getElementById('aceitar-documentos').onclick = async () => {
+            if (!documentosAtuais) return;
+            const payload = {aceita_termos:true, ciente_privacidade:true, termos_versao:documentosAtuais.termos_versao, privacidade_versao:documentosAtuais.privacidade_versao};
+            const resposta = await fetch(`${API_URL}/lgpd/documentos/aceitar`, {method:'POST', headers:cabecalhos(true), body:JSON.stringify(payload)});
+            const dados = await resposta.json(); avisar(resposta.ok ? 'Documentos atuais registrados.' : mensagemErroAPI(dados), !resposta.ok); if (resposta.ok) carregarConsentimentos();
+        };
+        window.revogarConsentimento = async id => {
+            const resposta = await fetch(`${API_URL}/lgpd/consentimentos/${id}/revogar`, {method:'DELETE', headers:cabecalhos()});
+            const dados = await resposta.json(); avisar(resposta.ok ? 'Consentimento revogado.' : mensagemErroAPI(dados), !resposta.ok); if (resposta.ok) carregarConsentimentos();
+        };
+
+        async function carregarSolicitacoes() {
+            const resposta = await fetch(`${API_URL}/lgpd/solicitacoes`, {headers:cabecalhos()});
+            const itens = await resposta.json(); if (!resposta.ok) throw new Error(mensagemErroAPI(itens));
+            document.getElementById('lista-solicitacoes').innerHTML = `<table class="min-w-full text-sm"><thead><tr class="text-left text-gray-500"><th class="p-2">Tipo</th><th class="p-2">Data</th><th class="p-2">Status</th><th class="p-2">Decisão</th>${role==='admin'?'<th class="p-2">Ações</th>':''}</tr></thead><tbody>${itens.map(item=>`<tr class="border-t"><td class="p-2">${escapeHTML(item.tipo)}</td><td class="p-2">${formatarData(item.solicitado_em)}</td><td class="p-2 font-semibold">${escapeHTML(item.status)}</td><td class="p-2">${escapeHTML(item.decisao_observacao||'—')}</td>${role==='admin'?`<td class="p-2">${item.status==='Pendente'?`<button onclick="processar(${item.id},'aprovar')" class="text-green-700 font-bold mr-3">Aprovar</button><button onclick="processar(${item.id},'rejeitar')" class="text-red-600 font-bold">Rejeitar</button>`:'—'}</td>`:''}</tr>`).join('')}</tbody></table>`;
+        }
+        window.processar = async (id, decisao) => {
+            const observacao = prompt('Registre a fundamentação da decisão:'); if (!observacao) return;
+            const resposta = await fetch(`${API_URL}/lgpd/solicitacoes/${id}/processar`, {method:'POST', headers:cabecalhos(true), body:JSON.stringify({decisao, observacao})});
+            const dados = await resposta.json(); avisar(resposta.ok ? 'Solicitação processada.' : mensagemErroAPI(dados), !resposta.ok); if (resposta.ok) carregarSolicitacoes();
+        };
+
+        async function carregarAuditoria() {
+            const resposta = await fetch(`${API_URL}/auditoria?limite=100`, {headers:cabecalhos()}); const itens = await resposta.json(); if(!resposta.ok) throw new Error(mensagemErroAPI(itens));
+            document.getElementById('tabela-auditoria').innerHTML = `<table class="min-w-full text-sm"><thead><tr class="text-left text-gray-500"><th class="p-2">Data</th><th class="p-2">Usuário</th><th class="p-2">Ação</th><th class="p-2">Recurso</th><th class="p-2">Registro</th><th class="p-2">Campos</th></tr></thead><tbody>${itens.map(item=>`<tr class="border-t"><td class="p-2 whitespace-nowrap">${formatarData(item.criado_em)}</td><td class="p-2">${escapeHTML(item.ator_referencia)} (${escapeHTML(item.ator_role)})</td><td class="p-2 font-semibold">${escapeHTML(item.acao)}</td><td class="p-2">${escapeHTML(item.recurso)}</td><td class="p-2">${item.registro_id??'—'}</td><td class="p-2">${escapeHTML(item.campos||'—')}</td></tr>`).join('')}</tbody></table>`;
+        }
+        document.getElementById('atualizar-auditoria').onclick = carregarAuditoria;
+
+        async function iniciar() {
+            const sessao = await window.exigirSessao();
+            if (!sessao) return;
+            role = sessao.role;
+            document.getElementById('voltar').href = role === 'admin' ? 'index.html' : role === 'medico' ? 'medico.html' : 'paciente.html';
+            if (role === 'paciente') {
+            document.getElementById('painel-paciente').classList.remove('hidden'); document.getElementById('secao-solicitacoes').classList.remove('hidden');
+            document.getElementById('exportar').onclick = async () => { const r=await fetch(`${API_URL}/lgpd/meus-dados/exportar`,{headers:cabecalhos()}); if(!r.ok){avisar(mensagemErroAPI(await r.json()),true);return;} const blob=await r.blob(); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download='meus-dados.json';a.click();URL.revokeObjectURL(url);avisar('Exportação concluída.'); };
+            document.getElementById('form-solicitacao').onsubmit = async event => { event.preventDefault(); const payload={tipo:document.getElementById('tipo-solicitacao').value,justificativa:document.getElementById('justificativa').value}; const r=await fetch(`${API_URL}/lgpd/solicitacoes`,{method:'POST',headers:cabecalhos(true),body:JSON.stringify(payload)}); const d=await r.json();avisar(r.ok?'Solicitação registrada.':mensagemErroAPI(d),!r.ok);if(r.ok){event.target.reset();carregarSolicitacoes();} };
+            carregarSolicitacoes().catch(e=>avisar(e.message,true));
+            } else if (role === 'admin') {
+                document.getElementById('secao-solicitacoes').classList.remove('hidden'); document.getElementById('painel-auditoria').classList.remove('hidden'); carregarSolicitacoes().catch(e=>avisar(e.message,true)); carregarAuditoria().catch(e=>avisar(e.message,true));
+            }
+            carregarDocumentos().then(carregarConsentimentos).catch(e=>avisar(e.message,true));
+        }
+        iniciar();
+    </script>
+</body>
+</html>

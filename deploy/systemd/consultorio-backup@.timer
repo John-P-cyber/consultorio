@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Consultorio backup with restore verification (%i)
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=consultorio-backup@%i.service
+
+[Install]
+WantedBy=timers.target

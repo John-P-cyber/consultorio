@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Segurança da conta - Clínica Saúde</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body class="app-shell min-h-screen bg-gray-50 text-gray-800">
+    <nav class="bg-white border-b border-gray-200 px-6 py-4">
+        <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <span class="brand-mark" aria-hidden="true">+</span>
+                <div><p class="font-bold text-blue-800">Clínica Saúde</p><p class="text-xs text-gray-500">Segurança da conta</p></div>
+            </div>
+            <a id="voltar" href="login.html" class="text-sm font-bold text-blue-700 hover:underline">Voltar ao portal</a>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto p-6 md:p-8 space-y-6">
+        <header>
+            <h1 class="text-3xl font-extrabold text-blue-950">Sessões e autenticação</h1>
+            <p class="text-gray-600 mt-2">Revise os acessos ativos e encerre imediatamente qualquer sessão que você não reconheça.</p>
+        </header>
+
+        <section class="grid md:grid-cols-2 gap-4">
+            <article class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                <p class="text-xs font-bold uppercase tracking-wide text-gray-500">Sessão protegida</p>
+                <h2 class="text-xl font-bold text-blue-950 mt-2">Cookies seguros</h2>
+                <p class="text-sm text-gray-600 mt-2">As credenciais são enviadas em cookies HttpOnly e não ficam disponíveis ao JavaScript do portal.</p>
+                <p id="identidade" class="text-sm font-semibold text-blue-800 mt-4">Carregando...</p>
+            </article>
+            <article class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                <p class="text-xs font-bold uppercase tracking-wide text-gray-500">Segundo fator</p>
+                <h2 class="text-xl font-bold text-blue-950 mt-2">TOTP</h2>
+                <p id="estado-mfa" class="text-sm text-gray-600 mt-2">Verificando...</p>
+                <p class="text-xs text-gray-500 mt-4">Códigos digitados manualmente não são resistentes a phishing. Sempre confira o endereço do portal.</p>
+            </article>
+        </section>
+
+        <section class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div><h2 class="text-xl font-bold text-blue-950">Sessões ativas</h2><p class="text-sm text-gray-500 mt-1">O refresh token é rotacionado a cada renovação.</p></div>
+                <button id="encerrar-todas" class="text-sm font-bold text-red-700 border border-red-200 rounded-lg px-4 py-2 hover:bg-red-50">Encerrar todas</button>
+            </div>
+            <div id="lista-sessoes" class="mt-5 space-y-3"><p class="text-sm text-gray-500">Carregando sessões...</p></div>
+        </section>
+
+        <section id="painel-recuperacao" class="hidden bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+            <h2 class="text-xl font-bold text-blue-950">Gerar novos códigos de recuperação</h2>
+            <p class="text-sm text-gray-600 mt-2">Os códigos anteriores serão invalidados. Confirme sua senha e um código TOTP ou de recuperação ainda válido.</p>
+            <form id="form-recuperacao" class="grid md:grid-cols-2 gap-4 mt-5" autocomplete="off">
+                <div><label for="senha" class="block text-sm font-semibold">Senha atual</label><input id="senha" type="password" required autocomplete="current-password" class="mt-1 w-full border rounded-lg p-3"></div>
+                <div><label for="codigo" class="block text-sm font-semibold">Código de autenticação</label><input id="codigo" required minlength="6" maxlength="32" autocomplete="one-time-code" class="mt-1 w-full border rounded-lg p-3"></div>
+                <button class="md:col-span-2 bg-blue-700 text-white font-bold rounded-lg py-3 hover:bg-blue-800">Invalidar anteriores e gerar</button>
+            </form>
+            <div id="novos-codigos" class="hidden mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <p class="font-bold text-amber-950">Guarde agora; eles não serão exibidos novamente.</p>
+                <pre id="lista-codigos" class="mt-3 whitespace-pre-wrap font-mono text-sm"></pre>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        const API_URL = window.location.origin;
+        let sessaoAtual = null;
+
+        const formatar = valor => new Date(valor).toLocaleString('pt-BR');
+
+        async function carregarSessoes() {
+            const resposta = await fetch(`${API_URL}/auth/sessoes`);
+            const sessoes = await resposta.json();
+            if (!resposta.ok) throw new Error(mensagemErroAPI(sessoes));
+            document.getElementById('lista-sessoes').innerHTML = sessoes.map(sessao => `
+                <article class="flex flex-wrap items-center justify-between gap-3 rounded-xl border ${sessao.atual ? 'border-blue-300 bg-blue-50' : 'border-gray-200'} p-4">
+                    <div>
+                        <p class="font-bold text-gray-800">${sessao.atual ? 'Este dispositivo' : 'Outra sessão'} ${sessao.mfa_verificada ? '· 2FA confirmado' : ''}</p>
+                        <p class="text-xs text-gray-500 mt-1">Criada em ${formatar(sessao.criado_em)} · renovada em ${formatar(sessao.ultimo_uso_em)}</p>
+                    </div>
+                    <button onclick="revogarSessao('${escapeHTML(sessao.id)}', ${sessao.atual})" class="text-sm font-bold text-red-700 hover:underline">Encerrar</button>
+                </article>
+            `).join('') || '<p class="text-sm text-gray-500">Nenhuma sessão ativa.</p>';
+        }
+
+        window.revogarSessao = async (id, atual) => {
+            const resposta = await fetch(`${API_URL}/auth/sessoes/${encodeURIComponent(id)}/revogar`, {method: 'POST'});
+            const dados = await resposta.json();
+            if (!resposta.ok) return alert(mensagemErroAPI(dados));
+            if (atual) return window.location.replace('login.html');
+            mostrarSucesso(dados.mensagem);
+            carregarSessoes();
+        };
+
+        document.getElementById('encerrar-todas').onclick = async () => {
+            if (!confirm('Encerrar todas as sessões, inclusive esta?')) return;
+            const resposta = await fetch(`${API_URL}/auth/logout-all`, {method: 'POST'});
+            if (resposta.ok) window.location.replace('login.html');
+        };
+
+        document.getElementById('form-recuperacao').onsubmit = async event => {
+            event.preventDefault();
+            const resposta = await fetch(`${API_URL}/auth/mfa/codigos-recuperacao`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+                    senha: document.getElementById('senha').value,
+                    codigo: document.getElementById('codigo').value,
+                })
+            });
+            const dados = await resposta.json();
+            if (!resposta.ok) return alert(mensagemErroAPI(dados));
+            document.getElementById('lista-codigos').textContent = dados.recovery_codes.join('\n');
+            document.getElementById('novos-codigos').classList.remove('hidden');
+            event.target.reset();
+        };
+
+        window.onload = async () => {
+            sessaoAtual = await window.exigirSessao();
+            if (!sessaoAtual) return;
+            const destinos = {admin: 'index.html', medico: 'medico.html', paciente: 'paciente.html'};
+            document.getElementById('voltar').href = destinos[sessaoAtual.role];
+            document.getElementById('identidade').textContent = `${sessaoAtual.email} · ${sessaoAtual.clinica_nome}`;
+            document.getElementById('estado-mfa').textContent = sessaoAtual.mfa_ativo
+                ? 'Ativo e confirmado nesta sessão.'
+                : 'Não exigido para este perfil.';
+            document.getElementById('painel-recuperacao').classList.toggle('hidden', !sessaoAtual.mfa_ativo);
+            carregarSessoes().catch(erro => alert(erro.message));
+        };
+    </script>
+</body>
+</html>

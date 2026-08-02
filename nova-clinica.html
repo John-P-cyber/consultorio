@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provisionar clínica | Clínica Saúde</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body class="app-shell min-h-screen flex items-center justify-center font-sans p-5">
+    <main class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg border border-gray-100">
+        <header class="text-center mb-7">
+            <span class="brand-mark mx-auto mb-4" aria-hidden="true">+</span>
+            <p class="page-kicker">Novo ambiente</p>
+            <h1 class="text-2xl font-extrabold text-blue-950 mt-2">Provisionar clínica</h1>
+            <p class="text-gray-500 text-sm mt-2">Crie um ambiente isolado e o primeiro acesso administrativo.</p>
+        </header>
+
+        <form id="form-clinica" class="space-y-4">
+            <div>
+                <label for="nome" class="block text-sm font-semibold text-gray-700">Nome da clínica</label>
+                <input id="nome" required minlength="2" maxlength="160" autocomplete="organization" placeholder="Clínica Centro"
+                       class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50">
+            </div>
+            <div>
+                <label for="slug" class="block text-sm font-semibold text-gray-700">Código da clínica</label>
+                <input id="slug" required maxlength="80" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="clinica-centro"
+                       class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50">
+                <p class="text-xs text-gray-500 mt-1">Use letras minúsculas, números e hífen. Esse código será usado no login.</p>
+            </div>
+            <div class="border-t border-gray-200 pt-4">
+                <p class="text-sm font-semibold text-gray-700 mb-3">Administrador inicial</p>
+                <div class="space-y-3">
+                    <input type="email" id="email" required autocomplete="email" placeholder="administrador@clinica.com"
+                           aria-label="E-mail do administrador" class="block w-full border border-gray-300 rounded-lg p-3 bg-gray-50">
+                    <input type="password" id="password" required minlength="8" autocomplete="new-password" placeholder="Senha com letras e números"
+                           aria-label="Senha do administrador" class="block w-full border border-gray-300 rounded-lg p-3 bg-gray-50">
+                    <input type="password" id="confirmar" required minlength="8" autocomplete="new-password" placeholder="Confirme a senha"
+                           aria-label="Confirmação da senha" class="block w-full border border-gray-300 rounded-lg p-3 bg-gray-50">
+                </div>
+            </div>
+            <div>
+                <label for="token" class="block text-sm font-semibold text-gray-700">Token de provisionamento</label>
+                <input type="password" id="token" required autocomplete="off" placeholder="Fornecido pelo operador da plataforma"
+                       class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50">
+            </div>
+            <fieldset class="border-t border-gray-200 pt-4 space-y-3">
+                <legend class="text-sm font-semibold text-gray-700 mb-2">Privacidade e contratação</legend>
+                <label class="flex items-start gap-3 text-sm text-gray-600">
+                    <input type="checkbox" id="aceita-termos" required class="mt-1 h-4 w-4">
+                    <span>Li e aceito os <a id="link-termos" href="termos.html" target="_blank" class="font-semibold text-blue-700 hover:underline">Termos de Uso</a>.</span>
+                </label>
+                <label class="flex items-start gap-3 text-sm text-gray-600">
+                    <input type="checkbox" id="ciente-privacidade" required class="mt-1 h-4 w-4">
+                    <span>Declaro ciência da <a id="link-privacidade" href="privacidade.html" target="_blank" class="font-semibold text-blue-700 hover:underline">Política de Privacidade</a>.</span>
+                </label>
+            </fieldset>
+            <button type="submit" id="botao-provisionar" disabled class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-lg transition shadow-md">
+                Criar ambiente da clínica
+            </button>
+        </form>
+
+        <p id="mensagem" class="hidden mt-5 text-sm text-center font-semibold" role="status"></p>
+        <p class="mt-7 text-center"><a href="login.html" class="text-sm font-semibold text-blue-700 hover:underline">Voltar para o login</a></p>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        let documentosLgpd = null;
+        const mensagem = document.getElementById('mensagem');
+        const exibirMensagem = (texto, erro = false) => {
+            mensagem.textContent = texto;
+            mensagem.className = `mt-5 text-sm text-center font-semibold ${erro ? 'text-red-600' : 'text-green-700'}`;
+        };
+        fetch(`${window.location.origin}/lgpd/documentos`).then(response => response.json()).then(dados => {
+            documentosLgpd = dados;
+            document.getElementById('link-termos').href = dados.termos_url;
+            document.getElementById('link-privacidade').href = dados.privacidade_url;
+            document.getElementById('botao-provisionar').disabled = false;
+        }).catch(() => exibirMensagem('Não foi possível carregar os documentos jurídicos.', true));
+
+        document.getElementById('nome').addEventListener('input', event => {
+            const slug = document.getElementById('slug');
+            if (slug.dataset.editado) return;
+            slug.value = event.target.value.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        });
+        document.getElementById('slug').addEventListener('input', event => {
+            event.target.dataset.editado = 'true';
+            event.target.value = event.target.value.toLowerCase();
+        });
+
+        document.getElementById('form-clinica').addEventListener('submit', async event => {
+            event.preventDefault();
+            const senha = document.getElementById('password').value;
+            if (senha !== document.getElementById('confirmar').value) {
+                exibirMensagem('As senhas não coincidem.', true);
+                return;
+            }
+            const payload = {
+                nome: document.getElementById('nome').value.trim(),
+                slug: document.getElementById('slug').value.trim().toLowerCase(),
+                email_admin: document.getElementById('email').value.trim(),
+                password: senha,
+                provisioning_token: document.getElementById('token').value
+                ,aceita_termos: document.getElementById('aceita-termos').checked
+                ,ciente_privacidade: document.getElementById('ciente-privacidade').checked
+                ,termos_versao: documentosLgpd?.termos_versao
+                ,privacidade_versao: documentosLgpd?.privacidade_versao
+            };
+            try {
+                const response = await fetch(`${window.location.origin}/auth/registrar-clinica`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const dados = await response.json();
+                if (!response.ok) {
+                    exibirMensagem(mensagemErroAPI(dados), true);
+                    return;
+                }
+                localStorage.setItem('clinica_slug', dados.slug);
+                exibirMensagem('Clínica criada. Redirecionando para o login...');
+                setTimeout(() => window.location.href = 'login.html', 1400);
+            } catch (_) {
+                exibirMensagem('Não foi possível conectar ao servidor.', true);
+            }
+        });
+    </script>
+</body>
+</html>

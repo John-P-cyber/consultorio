@@ -17,16 +17,22 @@
             <p class="text-gray-500 text-sm mt-2">Introduza as suas credenciais para aceder ao portal</p>
         </div>
 
-        <form id="form-login" class="space-y-6">
+        <form id="form-login" class="space-y-6" autocomplete="on">
             <div>
-                <label class="block text-sm font-semibold text-gray-700">E-mail</label>
-                <input type="email" id="email" required placeholder="exemplo@clinica.com" 
+                <label for="clinica" class="block text-sm font-semibold text-gray-700">Código da clínica</label>
+                <input type="text" id="clinica" required autocomplete="organization" placeholder="ex.: clinica-centro"
+                       pattern="[a-z0-9-]+" class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                <p class="text-xs text-gray-500 mt-1">Este código identifica o ambiente seguro da sua clínica.</p>
+            </div>
+            <div>
+                <label for="email" class="block text-sm font-semibold text-gray-700">E-mail</label>
+                <input type="email" id="email" required autocomplete="username" placeholder="exemplo@clinica.com"
                        class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
             </div>
 
             <div>
-                <label class="block text-sm font-semibold text-gray-700">Palavra-passe</label>
-                <input type="password" id="password" required placeholder="••••••••" 
+                <label for="password" class="block text-sm font-semibold text-gray-700">Palavra-passe</label>
+                <input type="password" id="password" required autocomplete="current-password" placeholder="••••••••"
                        class="mt-1 block w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
             </div>
 
@@ -35,31 +41,119 @@
             </button>
         </form>
 
-        <div class="mt-5 text-center">
+        <section id="painel-mfa" class="hidden space-y-5" aria-labelledby="titulo-mfa">
+            <div class="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                <p class="text-xs font-bold uppercase tracking-wide text-blue-700">Proteção adicional</p>
+                <h2 id="titulo-mfa" class="text-xl font-bold text-blue-950 mt-1">Confirme o segundo fator</h2>
+                <p id="descricao-mfa" class="text-sm text-blue-900 mt-2"></p>
+            </div>
+            <div id="setup-mfa" class="hidden space-y-3 rounded-xl border border-gray-200 p-4">
+                <p class="text-sm text-gray-600">No seu aplicativo autenticador, adicione uma conta usando a chave abaixo. O código muda a cada 30 segundos.</p>
+                <div>
+                    <span class="text-xs font-bold uppercase text-gray-500">Chave de configuração</span>
+                    <code id="segredo-mfa" class="mt-1 block break-all rounded-lg bg-gray-100 p-3 text-sm font-bold tracking-wider text-blue-950"></code>
+                </div>
+                <a id="link-otpauth" class="inline-block text-sm font-semibold text-blue-700 hover:underline">Abrir no autenticador deste dispositivo</a>
+            </div>
+            <form id="form-mfa" class="space-y-4" autocomplete="off">
+                <div>
+                    <label for="codigo-mfa" class="block text-sm font-semibold text-gray-700">Código do autenticador ou de recuperação</label>
+                    <input id="codigo-mfa" required minlength="6" maxlength="32" inputmode="text" autocapitalize="characters" autocomplete="one-time-code" placeholder="000000"
+                           class="mt-1 block w-full border border-gray-300 rounded-lg p-3 text-center text-xl tracking-[0.3em] bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 rounded-lg">Confirmar e continuar</button>
+                <button type="button" id="voltar-login" class="w-full text-sm font-semibold text-gray-600 hover:text-blue-700">Voltar ao login</button>
+            </form>
+        </section>
+
+        <section id="painel-recuperacao" class="hidden space-y-5" aria-labelledby="titulo-recuperacao">
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <h2 id="titulo-recuperacao" class="text-xl font-bold text-amber-950">Guarde os códigos de recuperação</h2>
+                <p class="text-sm text-amber-900 mt-2">Cada código funciona uma única vez. Eles não serão exibidos novamente.</p>
+            </div>
+            <pre id="codigos-recuperacao" class="grid grid-cols-2 gap-2 whitespace-pre-wrap rounded-xl bg-gray-950 p-4 text-center font-mono text-sm text-white"></pre>
+            <button id="baixar-codigos" type="button" class="w-full border border-blue-700 text-blue-700 font-bold py-3 rounded-lg hover:bg-blue-50">Baixar códigos</button>
+            <button id="continuar-portal" type="button" class="w-full bg-blue-700 text-white font-bold py-3 rounded-lg">Já guardei; continuar</button>
+        </section>
+
+        <div id="links-login" class="mt-5 text-center">
             <a href="recuperar-senha.html" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline">Esqueceu sua senha?</a>
             <div class="mt-2">
                 <a href="register.html" class="text-sm font-semibold text-blue-700 hover:text-blue-900 hover:underline">Criar conta</a>
+            </div>
+            <div class="mt-2">
+                <a href="nova-clinica.html" class="text-sm text-gray-600 hover:text-blue-800 hover:underline">Provisionar nova clínica</a>
             </div>
         </div>
         <p id="msg-erro" class="text-red-500 text-sm font-semibold mt-4 text-center hidden"></p>
     </div>
 
     <script>
-        const API_URL = "http://127.0.0.1:8000";
+        const API_URL = window.location.origin;
+        const clinicaSalva = localStorage.getItem('clinica_slug');
+        if (clinicaSalva) document.getElementById('clinica').value = clinicaSalva;
+        const msgErro = document.getElementById('msg-erro');
+        let modoMfa = null;
+        let destinoRole = null;
+        let codigosAtuais = [];
+
+        const exibirErro = texto => {
+            msgErro.textContent = texto;
+            msgErro.classList.remove('hidden');
+        };
+
+        const redirecionar = role => {
+            const destinos = {admin: 'index.html', paciente: 'paciente.html', medico: 'medico.html'};
+            window.location.href = destinos[role] || 'login.html';
+        };
+
+        async function tratarEtapa(dados) {
+            destinoRole = dados.role;
+            localStorage.setItem('clinica_slug', dados.clinica_slug);
+            if (dados.autenticado) {
+                if (dados.recovery_codes?.length) {
+                    codigosAtuais = dados.recovery_codes;
+                    document.getElementById('painel-mfa').classList.add('hidden');
+                    document.getElementById('painel-recuperacao').classList.remove('hidden');
+                    document.getElementById('codigos-recuperacao').textContent = codigosAtuais.join('\n');
+                    return;
+                }
+                redirecionar(dados.role);
+                return;
+            }
+
+            modoMfa = dados.mfa_setup_required ? 'setup' : 'login';
+            document.getElementById('form-login').classList.add('hidden');
+            document.getElementById('links-login').classList.add('hidden');
+            document.getElementById('painel-mfa').classList.remove('hidden');
+            const setup = document.getElementById('setup-mfa');
+            setup.classList.toggle('hidden', modoMfa !== 'setup');
+            document.getElementById('descricao-mfa').textContent = modoMfa === 'setup'
+                ? 'Este perfil exige autenticação em dois fatores. Configure-a antes do primeiro acesso.'
+                : 'Digite o código do aplicativo autenticador. Você também pode usar um código de recuperação.';
+            if (modoMfa === 'setup') {
+                const resposta = await fetch(`${API_URL}/auth/mfa/setup`);
+                const configuracao = await resposta.json();
+                if (!resposta.ok) throw new Error(mensagemErroAPI(configuracao));
+                document.getElementById('segredo-mfa').textContent = configuracao.segredo;
+                document.getElementById('link-otpauth').href = configuracao.uri_otpauth;
+            }
+            document.getElementById('codigo-mfa').focus();
+        }
 
         document.getElementById('form-login').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            const msgErro = document.getElementById('msg-erro');
-
+            const clinica = document.getElementById('clinica').value.trim().toLowerCase();
             msgErro.classList.add('hidden');
 
             // O FastAPI espera receber os dados de login no formato "Form Data" (URL Encoded)
             const dadosFormulario = new URLSearchParams();
             dadosFormulario.append('username', email); // O FastAPI usa o campo 'username' para o e-mail
             dadosFormulario.append('password', password);
+            dadosFormulario.append('client_id', clinica);
 
             try {
                 const resposta = await fetch(`${API_URL}/auth/login`, {
@@ -71,30 +165,45 @@
                 });
 
                 if (resposta.ok) {
-                    const dados = await resposta.json();
-
-                    // Guarda o Token e a Role no navegador do utilizador
-                    localStorage.setItem('token', dados.access_token);
-                    localStorage.setItem('role', dados.role);
-
-                    // Redireciona de acordo com o nível de acesso
-                    if (dados.role === 'admin') {
-                        window.location.href = "index.html";
-                    } else if (dados.role === 'paciente') {
-                        window.location.href = "paciente.html";
-                    } else if (dados.role === 'medico') {
-                        window.location.href = "medico.html";
-                    }
+                    await tratarEtapa(await resposta.json());
                 } else {
                     const erro = await resposta.json();
-                    msgErro.textContent = erro.detail || "E-mail ou palavra-passe incorretos.";
-                    msgErro.classList.remove('hidden');
+                    exibirErro(mensagemErroAPI(erro));
                 }
             } catch (error) {
-                msgErro.textContent = "Erro ao ligar ao servidor de autenticação.";
-                msgErro.classList.remove('hidden');
+                exibirErro(error.message || 'Erro ao ligar ao servidor de autenticação.');
             }
         });
+
+        document.getElementById('form-mfa').addEventListener('submit', async event => {
+            event.preventDefault();
+            msgErro.classList.add('hidden');
+            const endpoint = modoMfa === 'setup' ? '/auth/mfa/ativar' : '/auth/mfa/verificar';
+            const resposta = await fetch(`${API_URL}${endpoint}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({codigo: document.getElementById('codigo-mfa').value})
+            });
+            const dados = await resposta.json();
+            if (!resposta.ok) return exibirErro(mensagemErroAPI(dados));
+            await tratarEtapa(dados);
+        });
+
+        document.getElementById('voltar-login').onclick = () => window.location.reload();
+        document.getElementById('continuar-portal').onclick = () => redirecionar(destinoRole);
+        document.getElementById('baixar-codigos').onclick = () => {
+            const blob = new Blob([
+                'Códigos de recuperação - Clínica Saúde\n\n',
+                codigosAtuais.join('\n'),
+                '\n\nCada código só pode ser utilizado uma vez.\n'
+            ], {type: 'text/plain;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'codigos-recuperacao-clinica.txt';
+            link.click();
+            URL.revokeObjectURL(url);
+        };
     </script>
     <script src="app.js"></script>
 </body>

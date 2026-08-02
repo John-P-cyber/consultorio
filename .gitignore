@@ -2,3 +2,10 @@ venv/
 __pycache__/
 *.py[cod]
 .env
+*.sqlite
+*.sqlite3
+.pytest_cache/
+uploads/
+deploy/env/*.env
+deploy/env/*.compose.env
+deploy.tar.gz

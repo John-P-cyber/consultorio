@@ -1,0 +1,28 @@
+{$APP_DOMAIN} {
+    encode zstd gzip
+
+    @internal_metrics path /metrics
+    respond @internal_metrics 404
+
+    header {
+        -Server
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+
+    reverse_proxy app:8000 {
+        health_uri /health/ready
+        health_interval 15s
+        health_timeout 3s
+    }
+
+    log {
+        output stdout
+        format filter {
+            request>uri delete
+            request>headers delete
+            request>remote_ip ip_mask 16 32
+            request>client_ip ip_mask 16 32
+            wrap json
+        }
+    }
+}

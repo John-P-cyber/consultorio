@@ -11,9 +11,14 @@
 
     <div class="max-w-6xl mx-auto space-y-6">
         
-        <div class="app-topbar flex items-center justify-between border border-gray-200 rounded-2xl px-6 py-4">
+        <div class="app-topbar flex items-center justify-between border border-gray-200 rounded-2xl px-6 py-4 relative">
             <h1 class="text-3xl font-bold text-blue-800">Clínica Saúde</h1>
-            <span class="text-sm font-semibold bg-blue-100 text-blue-800 py-1 px-3 rounded-full">Painel Administrativo</span>
+            <div class="flex items-center gap-3">
+                <span class="hidden sm:inline text-sm font-semibold bg-blue-100 text-blue-800 py-1 px-3 rounded-full">Painel Administrativo</span>
+                <a href="seguranca.html" class="text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg">Segurança</a>
+                <a href="lgpd.html" class="text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg">Privacidade e auditoria</a>
+                <button onclick="terminarSessao()" class="text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg">Sair</button>
+            </div>
         </div>
 
         <div class="flex border-b border-gray-300 overflow-x-auto">
@@ -113,8 +118,15 @@
                             <input type="text" id="pac-estado" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
                         </div>
                     </div>
-                    <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition">Salvar Paciente no Sistema</button>
+                    <div class="flex gap-3">
+                        <button type="submit" class="flex-1 bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition">Salvar Paciente no Sistema</button>
+                        <button type="button" onclick="limparFormularioPaciente()" class="px-4 py-3 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition">Novo</button>
+                    </div>
                 </form>
+                <div class="mt-6 border-t pt-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Selecionar paciente para editar</label>
+                    <select id="select-paciente-editar" onchange="carregarPacienteParaEdicao(this.value)" class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50"></select>
+                </div>
             </div>
         </div>
 
@@ -143,6 +155,11 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">E-mail Corporativo</label>
                                 <input type="email" id="med-email" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-gray-700">Senha inicial de acesso</label>
+                                <input type="password" id="med-senha" minlength="8" autocomplete="new-password" placeholder="Obrigatória no primeiro cadastro" class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50">
+                                <p class="text-xs text-gray-500 mt-1">O médico poderá alterá-la pela recuperação de senha.</p>
                             </div>
                         </div>
 
@@ -173,8 +190,15 @@
                                 <input type="text" id="med-estado" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-gray-50">
                             </div>
                         </div>
-                        <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 mt-4">Salvar Médico</button>
+                        <div class="flex gap-3 mt-4">
+                            <button type="submit" class="flex-1 bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700">Salvar Médico</button>
+                            <button type="button" onclick="limparFormularioMedico()" class="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition">Novo</button>
+                        </div>
                     </form>
+                    <div class="mt-6 border-t pt-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Selecionar médico para editar</label>
+                        <select id="select-medico-editar" onchange="carregarMedicoParaEdicao(this.value)" class="mt-1 block w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50"></select>
+                    </div>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h2 class="text-lg font-bold mb-4 text-gray-800">Equipe Atual</h2>
@@ -185,70 +209,27 @@
 
     </div>
 
-    <div id="modal-avaliacao" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md animate-[fadeIn_0.2s_ease-in-out]">
-            <h2 class="text-2xl font-bold mb-4 text-gray-800 border-b pb-2">Avaliar Consulta</h2>
-            
-            <form id="form-avaliacao" class="space-y-4">
-                <input type="hidden" id="av-agendamento-id">
-                <input type="hidden" id="av-paciente-id">
-                <input type="hidden" id="av-medico-id">
-
-                <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                    <label class="block text-sm font-bold text-blue-800">1. Nota para o Médico</label>
-                    <select id="av-nota-medico" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-white">
-                        <option value="5">⭐⭐⭐⭐⭐ (5) Excelente</option>
-                        <option value="4">⭐⭐⭐⭐ (4) Muito Bom</option>
-                        <option value="3">⭐⭐⭐ (3) Bom</option>
-                        <option value="2">⭐⭐ (2) Regular</option>
-                        <option value="1">⭐ (1) Mau</option>
-                    </select>
-                    <label class="block text-sm font-medium text-gray-700 mt-2">Comentário do Paciente</label>
-                    <textarea id="av-comentario-paciente" rows="2" placeholder="O que achou do atendimento?" class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-white"></textarea>
-                </div>
-
-                <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                    <label class="block text-sm font-bold text-gray-700">2. Nota para o Paciente (Uso Interno)</label>
-                    <select id="av-nota-paciente" required class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-white">
-                        <option value="5">⭐⭐⭐⭐⭐ (5) Excelente</option>
-                        <option value="4">⭐⭐⭐⭐ (4) Muito Bom</option>
-                        <option value="3">⭐⭐⭐ (3) Bom</option>
-                        <option value="2">⭐⭐ (2) Regular</option>
-                        <option value="1">⭐ (1) Mau</option>
-                    </select>
-                    <label class="block text-sm font-medium text-gray-700 mt-2">Observações Médicas</label>
-                    <textarea id="av-comentario-medico" rows="2" placeholder="Paciente foi pontual?" class="mt-1 block w-full border border-gray-300 rounded-lg p-2 bg-white"></textarea>
-                </div>
-
-                <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
-                    <button type="button" onclick="fecharModal()" class="px-4 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition">Cancelar</button>
-                    <button type="submit" class="px-4 py-2 bg-yellow-500 text-yellow-900 font-bold rounded-lg hover:bg-yellow-600 transition shadow-sm">Salvar Feedback</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <script>
-        const API_URL = "http://127.0.0.1:8000";
-        const fetchOriginal = window.fetch.bind(window);
-        window.fetch = (input, init = {}) => {
-            const url = typeof input === 'string' ? input : input.url;
-            if (!url.startsWith(API_URL)) return fetchOriginal(input, init);
-            const headers = new Headers(init.headers || {});
-            const token = localStorage.getItem('token');
-            if (token) headers.set('Authorization', `Bearer ${token}`);
-            return fetchOriginal(input, { ...init, headers });
-        };
+        const API_URL = window.location.origin;
 
         // ABAS
         function mudarAba(abaId) {
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden', 'block') && c.classList.remove('block'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.replace('border-blue-600', 'border-transparent') || b.classList.replace('text-blue-600', 'text-gray-500'));
-            
-            document.getElementById(abaId).classList.replace('hidden', 'block');
+            document.querySelectorAll('.tab-content').forEach(conteudo => {
+                conteudo.classList.add('hidden');
+                conteudo.classList.remove('block');
+            });
+            document.querySelectorAll('.tab-btn').forEach(botao => {
+                botao.classList.remove('border-blue-600', 'text-blue-600');
+                botao.classList.add('border-transparent', 'text-gray-500');
+            });
+
+            const aba = document.getElementById(abaId);
+            aba.classList.remove('hidden');
+            aba.classList.add('block');
             const idBotao = 'btn-' + abaId.split('-')[1];
-            document.getElementById(idBotao).classList.replace('border-transparent', 'border-blue-600');
-            document.getElementById(idBotao).classList.replace('text-gray-500', 'text-blue-600');
+            const botaoAtivo = document.getElementById(idBotao);
+            botaoAtivo.classList.remove('border-transparent', 'text-gray-500');
+            botaoAtivo.classList.add('border-blue-600', 'text-blue-600');
         }
 
         // INTEGRAÇÃO VIACEP
@@ -268,7 +249,69 @@
             } catch (error) {}
         }
 
-        // CADASTROS
+        let pacienteEditandoId = null;
+        let medicoEditandoId = null;
+
+        function limparFormularioPaciente() {
+            document.getElementById('form-paciente').reset();
+            pacienteEditandoId = null;
+            document.getElementById('select-paciente-editar').value = '';
+        }
+
+        function limparFormularioMedico() {
+            document.getElementById('form-medico').reset();
+            medicoEditandoId = null;
+            document.getElementById('select-medico-editar').value = '';
+        }
+
+        async function carregarPacienteParaEdicao(pacienteId) {
+            if (!pacienteId) {
+                limparFormularioPaciente();
+                return;
+            }
+            const res = await fetch(`${API_URL}/pacientes/`);
+            const pacientes = await res.json();
+            const paciente = pacientes.find(p => String(p.id) === String(pacienteId));
+            if (!paciente) return;
+            pacienteEditandoId = paciente.id;
+            document.getElementById('pac-nome').value = paciente.nome || '';
+            document.getElementById('pac-cpf').value = paciente.cpf || '';
+            document.getElementById('pac-cpf').readOnly = true;
+            document.getElementById('pac-telefone').value = paciente.telefone || '';
+            document.getElementById('pac-email').value = paciente.email || '';
+            document.getElementById('pac-nascimento').value = paciente.data_nascimento || '';
+            document.getElementById('pac-rua').value = paciente.endereco_rua || '';
+            document.getElementById('pac-numero').value = paciente.endereco_numero || '';
+            document.getElementById('pac-bairro').value = paciente.endereco_bairro || '';
+            document.getElementById('pac-cidade').value = paciente.endereco_cidade || '';
+            document.getElementById('pac-estado').value = paciente.endereco_estado || '';
+            document.getElementById('pac-cep').value = paciente.endereco_cep || '';
+        }
+
+        async function carregarMedicoParaEdicao(medicoId) {
+            if (!medicoId) {
+                limparFormularioMedico();
+                return;
+            }
+            const res = await fetch(`${API_URL}/medicos/`);
+            const medicos = await res.json();
+            const medico = medicos.find(m => String(m.id) === String(medicoId));
+            if (!medico) return;
+            medicoEditandoId = medico.id;
+            document.getElementById('med-nome').value = medico.nome || '';
+            document.getElementById('med-especialidade').value = medico.especialidade || '';
+            document.getElementById('med-crm').value = medico.crm || '';
+            document.getElementById('med-crm').readOnly = true;
+            document.getElementById('med-duracao').value = medico.duracao_consulta || 30;
+            document.getElementById('med-email').value = medico.email || '';
+            document.getElementById('med-rua').value = medico.endereco_rua || '';
+            document.getElementById('med-numero').value = medico.endereco_numero || '';
+            document.getElementById('med-bairro').value = medico.endereco_bairro || '';
+            document.getElementById('med-cidade').value = medico.endereco_cidade || '';
+            document.getElementById('med-estado').value = medico.endereco_estado || '';
+            document.getElementById('med-cep').value = medico.endereco_cep || '';
+        }
+
         document.getElementById('form-paciente').addEventListener('submit', async function(e) {
             e.preventDefault();
             const dados = {
@@ -279,13 +322,17 @@
                 endereco_estado: document.getElementById('pac-estado').value, endereco_cep: document.getElementById('pac-cep').value
             };
             try {
-                const res = await fetch(`${API_URL}/pacientes/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
-                if (res.ok) { alert("Paciente cadastrado!"); this.reset(); carregarOpcoesAgendamento(); } else { const err = await res.json(); alert("Erro: " + err.detail); }
+                const url = pacienteEditandoId ? `${API_URL}/pacientes/${pacienteEditandoId}` : `${API_URL}/pacientes/`;
+                const method = pacienteEditandoId ? 'PATCH' : 'POST';
+                const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
+                if (res.ok) { alert(pacienteEditandoId ? 'Paciente atualizado!' : 'Paciente cadastrado!'); this.reset(); pacienteEditandoId = null; document.getElementById('pac-cpf').readOnly = false; await carregarOpcoesAgendamento(); await carregarSelectsEdicao(); } else { const err = await res.json(); alert("Erro: " + err.detail); }
             } catch (error) { alert("Erro de conexão."); }
         });
 
         document.getElementById('form-medico').addEventListener('submit', async function(e) {
             e.preventDefault();
+            const senhaInicial = document.getElementById('med-senha').value;
+            if (!medicoEditandoId && senhaInicial.length < 8) { alert('Informe uma senha inicial com pelo menos 8 caracteres.'); return; }
             const dados = {
                 nome: document.getElementById('med-nome').value, especialidade: document.getElementById('med-especialidade').value, crm: document.getElementById('med-crm').value,
                 duracao_consulta: parseInt(document.getElementById('med-duracao').value), email: document.getElementById('med-email').value,
@@ -294,8 +341,17 @@
                 endereco_estado: document.getElementById('med-estado').value, endereco_cep: document.getElementById('med-cep').value
             };
             try {
-                const res = await fetch(`${API_URL}/medicos/`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
-                if (res.ok) { alert("Médico cadastrado!"); this.reset(); buscarMedicos(); carregarOpcoesAgendamento(); } else { const err = await res.json(); alert("Erro: " + err.detail); }
+                const url = medicoEditandoId ? `${API_URL}/medicos/${medicoEditandoId}` : `${API_URL}/medicos/`;
+                const method = medicoEditandoId ? 'PATCH' : 'POST';
+                const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(dados) });
+                if (res.ok) {
+                    const estavaEditando = Boolean(medicoEditandoId);
+                    if (!estavaEditando) {
+                        const acesso = await fetch(`${API_URL}/auth/usuarios`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email: dados.email, password: senhaInicial, role: 'medico' }) });
+                        if (!acesso.ok) { const erroAcesso = await acesso.json(); alert(`Perfil criado, mas o acesso falhou: ${erroAcesso.detail}`); return; }
+                    }
+                    alert(estavaEditando ? 'Médico atualizado!' : 'Médico e acesso cadastrados!'); this.reset(); medicoEditandoId = null; document.getElementById('med-crm').readOnly = false; buscarMedicos(); carregarOpcoesAgendamento(); await carregarSelectsEdicao();
+                } else { const err = await res.json(); alert("Erro: " + err.detail); }
             } catch (error) { alert("Erro de conexão."); }
         });
 
@@ -310,8 +366,8 @@
                     lista.innerHTML += `
                         <li class="border border-gray-200 p-3 rounded-lg flex justify-between items-center bg-gray-50 shadow-sm">
                             <div>
-                                <span class="font-bold text-gray-800 block text-md">${m.nome}</span>
-                                <span class="text-xs text-gray-500">CRM: ${m.crm}</span>
+                                <span class="font-bold text-gray-800 block text-md">${escapeHTML(m.nome)}</span>
+                                <span class="text-xs text-gray-500">CRM: ${escapeHTML(m.crm)}</span>
                             </div>
                             <span class="bg-yellow-100 text-yellow-800 text-sm font-bold px-3 py-1 rounded-full border border-yellow-300">
                                 ⭐ ${m.avaliacao_media}
@@ -323,14 +379,22 @@
         }
 
         // AGENDAMENTOS
-        async function carregarOpcoesAgendamento() {
+        async function carregarSelectsEdicao() {
             try {
                 const [resP, resM] = await Promise.all([fetch(`${API_URL}/pacientes/`), fetch(`${API_URL}/medicos/`)]);
                 const pacientes = await resP.json(); const medicos = await resM.json();
                 const sPac = document.getElementById('select-paciente'); const sMed = document.getElementById('select-medico');
-                sPac.innerHTML = '<option value="">Selecione...</option>' + pacientes.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
-                sMed.innerHTML = '<option value="">Selecione...</option>' + medicos.map(m => `<option value="${m.id}">${m.nome}</option>`).join('');
+                const sPacEditar = document.getElementById('select-paciente-editar');
+                const sMedEditar = document.getElementById('select-medico-editar');
+                sPac.innerHTML = '<option value="">Selecione...</option>' + pacientes.map(p => `<option value="${p.id}">${escapeHTML(p.nome)}</option>`).join('');
+                sMed.innerHTML = '<option value="">Selecione...</option>' + medicos.map(m => `<option value="${m.id}">${escapeHTML(m.nome)}</option>`).join('');
+                sPacEditar.innerHTML = '<option value="">Selecione um paciente para editar</option>' + pacientes.map(p => `<option value="${p.id}">${escapeHTML(p.nome)}</option>`).join('');
+                sMedEditar.innerHTML = '<option value="">Selecione um médico para editar</option>' + medicos.map(m => `<option value="${m.id}">${escapeHTML(m.nome)}</option>`).join('');
             } catch (e) {}
+        }
+
+        async function carregarOpcoesAgendamento() {
+            return carregarSelectsEdicao();
         }
 
         async function carregarHorarios() {
@@ -370,22 +434,17 @@
                     const dataFormatada = new Date(ag.data_hora).toLocaleString('pt-BR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
                     
                     // Lógica para exibir o botão apenas se a consulta foi "Atendida"
-                    let btnAvaliar = '';
-                    if (ag.status === 'Atendido') {
-                        btnAvaliar = `<button onclick="abrirModal(${ag.id}, ${ag.paciente_id}, ${ag.medico_id})" class="mt-3 w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold py-2 px-2 rounded-lg text-sm transition shadow-sm">⭐ Avaliar Consulta</button>`;
-                    }
                     
                     lista.innerHTML += `
                         <li class="border border-gray-200 p-4 rounded-xl bg-white shadow-sm relative">
-                            <div class="font-bold text-gray-800 text-lg">${p.nome}</div>
-                            <div class="text-blue-600 font-medium text-sm mb-2">👨‍⚕️ ${m.nome}</div>
+                            <div class="font-bold text-gray-800 text-lg">${escapeHTML(p.nome)}</div>
+                            <div class="text-blue-600 font-medium text-sm mb-2">👨‍⚕️ ${escapeHTML(m.nome)}</div>
                             <div class="text-gray-700 text-sm mb-2">📅 ${dataFormatada}</div>
                             <select onchange="atualizarStatus(${ag.id}, this.value)" class="text-xs font-bold px-2 py-2 rounded-lg border border-gray-300 w-full mb-1 bg-gray-50 focus:ring-blue-500">
                                 <option value="Confirmado" ${ag.status === 'Confirmado' ? 'selected' : ''}>⏳ Confirmado</option>
                                 <option value="Atendido" ${ag.status === 'Atendido' ? 'selected' : ''}>✅ Atendido</option>
                                 <option value="Cancelado" ${ag.status === 'Cancelado' ? 'selected' : ''}>❌ Cancelado</option>
                             </select>
-                            ${btnAvaliar}
                         </li>
                     `;
                 });
@@ -399,56 +458,11 @@
             } catch (error) { alert("Erro ao atualizar status."); }
         }
 
-        // ==========================================
-        // LÓGICA DO MODAL DE AVALIAÇÃO
-        // ==========================================
-        function abrirModal(agendamentoId, pacienteId, medicoId) {
-            document.getElementById('av-agendamento-id').value = agendamentoId;
-            document.getElementById('av-paciente-id').value = pacienteId;
-            document.getElementById('av-medico-id').value = medicoId;
-            document.getElementById('modal-avaliacao').classList.remove('hidden');
-        }
-
-        function fecharModal() {
-            document.getElementById('modal-avaliacao').classList.add('hidden');
-            document.getElementById('form-avaliacao').reset();
-        }
-
-        document.getElementById('form-avaliacao').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const dados = {
-                agendamento_id: parseInt(document.getElementById('av-agendamento-id').value),
-                paciente_id: parseInt(document.getElementById('av-paciente-id').value),
-                medico_id: parseInt(document.getElementById('av-medico-id').value),
-                nota_medico: parseInt(document.getElementById('av-nota-medico').value),
-                comentario_paciente: document.getElementById('av-comentario-paciente').value,
-                nota_paciente: parseInt(document.getElementById('av-nota-paciente').value),
-                comentario_medico: document.getElementById('av-comentario-medico').value
-            };
-
-            try {
-                const res = await fetch(`${API_URL}/avaliacoes/`, { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify(dados) 
-                });
-                
-                if (res.ok) {
-                    alert("Feedback salvo com sucesso!");
-                    fecharModal();
-                    buscarMedicos(); // Atualiza instantaneamente a média de estrelas na aba Equipe Médica
-                } else {
-                    const err = await res.json();
-                    alert("Atenção: " + err.detail);
-                }
-            } catch (error) { 
-                alert("Erro grave de conexão."); 
-            }
-        });
+        async function terminarSessao() { await window.encerrarSessao(); }
 
         // INIT
-        window.onload = () => {
+        window.onload = async () => {
+            if (!await window.exigirSessao('admin')) return;
             mudarAba('aba-agenda');
             buscarMedicos();
             carregarOpcoesAgendamento();

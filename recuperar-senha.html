@@ -18,6 +18,10 @@
 
         <form id="form-solicitar" class="space-y-5">
             <div>
+                <label for="clinica" class="block text-sm font-semibold text-gray-700">Código da clínica</label>
+                <input type="text" id="clinica" required pattern="[a-z0-9-]+" placeholder="ex.: clinica-centro" class="mt-1 block w-full border rounded-lg p-3">
+            </div>
+            <div>
                 <label for="email" class="block text-sm font-semibold text-gray-700">E-mail cadastrado</label>
                 <input type="email" id="email" autocomplete="email" required placeholder="voce@exemplo.com" class="mt-1 block w-full border rounded-lg p-3">
             </div>
@@ -29,7 +33,7 @@
             <div>
                 <label for="nova-senha" class="block text-sm font-semibold text-gray-700">Nova senha</label>
                 <input type="password" id="nova-senha" autocomplete="new-password" minlength="8" required class="mt-1 block w-full border rounded-lg p-3">
-                <p class="text-xs text-gray-500 mt-2">Use pelo menos 8 caracteres.</p>
+                <p class="text-xs text-gray-500 mt-2">Use pelo menos 8 caracteres, incluindo letras e números.</p>
             </div>
             <div>
                 <label for="confirmar-senha" class="block text-sm font-semibold text-gray-700">Confirmar nova senha</label>
@@ -43,10 +47,12 @@
     </main>
 
     <script>
-        const API_URL = "http://127.0.0.1:8000";
+        const API_URL = window.location.origin;
         const parametros = new URLSearchParams(window.location.search);
         const token = parametros.get('token');
         const mensagem = document.getElementById('mensagem');
+        const clinicaSalva = localStorage.getItem('clinica_slug');
+        if (clinicaSalva) document.getElementById('clinica').value = clinicaSalva;
         const exibirMensagem = (texto, erro = false) => {
             mensagem.textContent = texto;
             mensagem.className = `mt-5 text-sm text-center font-semibold ${erro ? 'text-red-600' : 'text-green-700'}`;
@@ -62,12 +68,19 @@
 
         document.getElementById('form-solicitar').addEventListener('submit', async event => {
             event.preventDefault();
-            const response = await fetch(`${API_URL}/auth/solicitar-recuperacao`, {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({email: document.getElementById('email').value})
-            });
-            const dados = await response.json();
-            exibirMensagem(dados.mensagem || 'Confira sua caixa de entrada.', !response.ok);
+            try {
+                const response = await fetch(`${API_URL}/auth/solicitar-recuperacao`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        clinica_slug: document.getElementById('clinica').value.trim().toLowerCase(),
+                        email: document.getElementById('email').value
+                    })
+                });
+                const dados = await response.json();
+                exibirMensagem(response.ok ? dados.mensagem : mensagemErroAPI(dados), !response.ok);
+            } catch (_) {
+                exibirMensagem('Não foi possível conectar ao servidor.', true);
+            }
         });
 
         document.getElementById('form-redefinir').addEventListener('submit', async event => {
@@ -76,13 +89,17 @@
             if (senha !== document.getElementById('confirmar-senha').value) {
                 exibirMensagem('As senhas não coincidem.', true); return;
             }
-            const response = await fetch(`${API_URL}/auth/redefinir-senha`, {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({token, nova_senha: senha})
-            });
-            const dados = await response.json();
-            exibirMensagem(dados.mensagem || 'Não foi possível atualizar a senha.', !response.ok);
-            if (response.ok) setTimeout(() => window.location.href = 'login.html', 1800);
+            try {
+                const response = await fetch(`${API_URL}/auth/redefinir-senha`, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({token, nova_senha: senha})
+                });
+                const dados = await response.json();
+                exibirMensagem(response.ok ? dados.mensagem : mensagemErroAPI(dados), !response.ok);
+                if (response.ok) setTimeout(() => window.location.href = 'login.html', 1800);
+            } catch (_) {
+                exibirMensagem('Não foi possível conectar ao servidor.', true);
+            }
         });
     </script>
     <script src="app.js"></script>
