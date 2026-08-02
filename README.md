@@ -108,4 +108,6 @@ A suíte usa SQLite isolado e cobre cookies HttpOnly, CSRF, rotação e replay d
 
 O projeto agora possui imagem Docker sem privilégios, proxy HTTPS, deploy de staging/produção via GitHub Actions, health checks, métricas, alertas, logs JSON centralizados e backup com restauração testada. O guia completo de provisionamento, secrets, CI/CD, monitoramento, rollback e operação está em [docs/PRODUCTION.md](docs/PRODUCTION.md).
 
+Para uma demonstração sem domínio próprio, o repositório também inclui um Blueprint gratuito do Render. Ele cria o serviço web, um PostgreSQL e os segredos iniciais, executa as migrations na inicialização e usa automaticamente a URL HTTPS `onrender.com`. Consulte [docs/RENDER.md](docs/RENDER.md).
+
 Domínio, servidores, banco PostgreSQL gerenciado, bucket externo e credenciais não são criados pelo repositório. Esses recursos devem ser configurados no provedor seguindo o checklist antes da primeira publicação.

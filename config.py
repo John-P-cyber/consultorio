@@ -6,6 +6,8 @@ from urllib.parse import urlsplit, urlunsplit, quote
 
 def carregar_env_local() -> None:
     """Carrega variáveis simples de um .env sem depender de pacote externo."""
+    if os.getenv("RENDER", "").lower() == "true":
+        return
     arquivo = Path(__file__).with_name(".env")
     if not arquivo.exists():
         return
@@ -24,8 +26,9 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 APP_ENV = os.getenv("APP_ENV", "development").lower()
 PRODUCTION_LIKE = APP_ENV in {"staging", "production"}
 SERVICE_NAME = os.getenv("SERVICE_NAME", "consultorio-api")
-RELEASE_SHA = os.getenv("RELEASE_SHA", "local")
+RELEASE_SHA = os.getenv("RELEASE_SHA") or os.getenv("RENDER_GIT_COMMIT", "local")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
 DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))
 DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "10"))
 DB_POOL_TIMEOUT_SECONDS = int(os.getenv("DB_POOL_TIMEOUT_SECONDS", "10"))
@@ -44,7 +47,12 @@ ACCESS_COOKIE_NAME = "__Host-clinica_access" if COOKIE_SECURE else "clinica_acce
 REFRESH_COOKIE_NAME = "__Host-clinica_refresh" if COOKIE_SECURE else "clinica_refresh"
 PREAUTH_COOKIE_NAME = "__Host-clinica_preauth" if COOKIE_SECURE else "clinica_preauth"
 CSRF_COOKIE_NAME = "__Host-clinica_csrf" if COOKIE_SECURE else "clinica_csrf"
-RESET_URL = os.getenv("RESET_URL", "http://127.0.0.1:8000/recuperar-senha.html")
+RESET_URL = os.getenv(
+    "RESET_URL",
+    f"{RENDER_EXTERNAL_URL}/recuperar-senha.html"
+    if RENDER_EXTERNAL_URL
+    else "http://127.0.0.1:8000/recuperar-senha.html",
+)
 SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
@@ -59,7 +67,12 @@ PRONTUARIO_UPLOAD_DIR = Path(
     os.getenv("PRONTUARIO_UPLOAD_DIR", str(Path(__file__).with_name("uploads") / "prontuarios"))
 ).resolve()
 PRONTUARIO_MAX_UPLOAD_MB = int(os.getenv("PRONTUARIO_MAX_UPLOAD_MB", "10"))
-ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("ALLOWED_ORIGINS", "http://127.0.0.1:5500,http://localhost:5500").split(",") if origin.strip()]
+ALLOWED_ORIGINS_DEFAULT = RENDER_EXTERNAL_URL or "http://127.0.0.1:5500,http://localhost:5500"
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", ALLOWED_ORIGINS_DEFAULT).split(",")
+    if origin.strip()
+]
 
 if not SECRET_KEY:
     raise RuntimeError("Defina SECRET_KEY no ambiente antes de iniciar a aplicação.")
@@ -73,6 +86,8 @@ if APP_ENV not in {"development", "test", "staging", "production"}:
     raise RuntimeError("APP_ENV deve ser development, test, staging ou production.")
 if PRODUCTION_LIKE and "*" in ALLOWED_ORIGINS:
     raise RuntimeError("ALLOWED_ORIGINS não pode conter '*' em staging ou produção.")
+if PRODUCTION_LIKE and not ALLOWED_ORIGINS:
+    raise RuntimeError("Defina ALLOWED_ORIGINS em staging e produção.")
 if PRODUCTION_LIKE and any(not origin.startswith("https://") for origin in ALLOWED_ORIGINS):
     raise RuntimeError("ALLOWED_ORIGINS deve conter apenas origens HTTPS em staging e produção.")
 if PRODUCTION_LIKE and not CLINIC_PROVISIONING_TOKEN:

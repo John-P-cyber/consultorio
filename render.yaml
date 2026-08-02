@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: consultorio
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/ready
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SERVICE_NAME
+        value: consultorio-api
+      - key: LOG_LEVEL
+        value: INFO
+      - key: DATABASE_URL
+        fromDatabase:
+          name: consultorio-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: MFA_MASTER_KEY
+        generateValue: true
+      - key: CLINIC_PROVISIONING_TOKEN
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAMESITE
+        value: strict
+      - key: RUN_MIGRATIONS_ON_START
+        value: "true"
+
+databases:
+  - name: consultorio-db
+    plan: free
+    region: ohio
+    databaseName: consultorio
+    user: consultorio
