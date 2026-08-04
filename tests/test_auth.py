@@ -78,6 +78,7 @@ def client():
         main.models.Base.metadata.create_all(bind=conexao)
         conexao.connection.dbapi_connection.execute("PRAGMA foreign_keys=ON")
     main.tentativas_login.clear()
+    main.tentativas_assistente.clear()
     with TestClient(main.app) as test_client:
         yield test_client
 
@@ -216,6 +217,50 @@ def test_cadastro_e_login_de_paciente(client):
     assert resposta_login.status_code == 200
     assert resposta_login.json()["role"] == "paciente"
     assert resposta_login.json()["clinica_slug"] == "clinica-a"
+
+
+def test_retencao_assistente_ignora_tabela_inexistente(client):
+    with main.engine.begin() as conn:
+        conn.exec_driver_sql("DROP TABLE IF EXISTS assistente_mensagens")
+        conn.exec_driver_sql("DROP TABLE IF EXISTS assistente_conversas")
+
+    assert main.excluir_conversas_assistente_expiradas() == 0
+
+
+def test_medico_pode_agendar_consulta_para_paciente(client):
+    headers_admin = criar_admin(client)
+    paciente = client.post("/pacientes/", headers=headers_admin, json=dados_paciente_perfil()).json()
+    medico = client.post("/medicos/", headers=headers_admin, json=dados_medico()).json()
+    conta = client.post("/auth/usuarios", headers=headers_admin, json={
+        "email": "medica@example.com", "password": "senha-medico-123", "role": "medico",
+    })
+    assert conta.status_code == 201, conta.text
+
+    resposta_login = login(client, "medica@example.com", "senha-medico-123")
+    assert resposta_login.status_code == 200, resposta_login.text
+    headers_medico = headers_sessao(client)
+
+    disponibilidade = client.get(
+        f"/medicos/{medico['id']}/agenda-disponibilidade?data_inicio=2099-01-01&dias=3",
+        headers=headers_medico,
+    )
+    assert disponibilidade.status_code == 200, disponibilidade.text
+    payload = disponibilidade.json()
+    assert payload[0]["data"] == "2099-01-01"
+    assert payload[0]["horarios"]
+
+    agendamento = client.post(
+        "/agendamentos/",
+        headers=headers_medico,
+        json={
+            "paciente_id": paciente["id"],
+            "medico_id": medico["id"],
+            "data_hora": "2099-01-02T09:00:00",
+        },
+    )
+    assert agendamento.status_code == 201, agendamento.text
+    assert agendamento.json()["medico_id"] == medico["id"]
+    assert agendamento.json()["paciente_id"] == paciente["id"]
 
 
 def test_cadastro_incompleto_de_paciente_e_rejeitado(client):
@@ -518,13 +563,15 @@ def test_confirmacao_cancelamento_e_lembrete_usam_canais_oficiais_sem_duplicar(c
     })
     assert agendamento.status_code == 201, agendamento.text
     agendamento_id = agendamento.json()["id"]
-    assert len(enviados_email) == 1
+    assert len(enviados_email) == 2
     assert len(enviados_whatsapp) == 1
+    assert {item["destinatario"] for item in enviados_email} == {"p1@example.com", "medica@example.com"}
+    assert any("Novo agendamento" in item["assunto"] for item in enviados_email)
     assert enviados_whatsapp[0]["phone_number_id"] == "123456789012345"
     assert enviados_whatsapp[0]["codigo_pais"] == "55"
 
     main.processar_comunicacoes_agendamento(agendamento_id, "confirmacao")
-    assert len(enviados_email) == 1
+    assert len(enviados_email) == 2
     assert len(enviados_whatsapp) == 1
 
     with main.SessionLocal() as db:
@@ -542,14 +589,14 @@ def test_confirmacao_cancelamento_e_lembrete_usam_canais_oficiais_sem_duplicar(c
         headers=headers_admin,
     )
     assert cancelamento.status_code == 200, cancelamento.text
-    assert len(enviados_email) == 3
+    assert len(enviados_email) == 4
     assert len(enviados_whatsapp) == 3
     assert enviados_whatsapp[-1]["template"] == "cancelamento_consulta"
     assert enviados_whatsapp[-1]["parametros"][-1] == "Paciente avisou"
 
     historico = client.get("/comunicacoes/historico", headers=headers_admin)
     assert historico.status_code == 200
-    assert len(historico.json()) == 6
+    assert len(historico.json()) == 7
     assert all("@clinica.example.com" not in (item["destinatario_resumo"] or "") or "***" in item["destinatario_resumo"] for item in historico.json())
 
 
@@ -890,6 +937,204 @@ def test_mfa_e_obrigatorio_e_codigo_recuperacao_e_de_uso_unico(client):
         "/auth/mfa/verificar", headers=cabecalho_csrf(client), json={"codigo": recuperacao}
     )
     assert repetido.status_code == 401
+
+
+def test_assistente_paciente_isola_clinica_agenda_para_si_e_exporta_conversa(client, monkeypatch):
+    headers_admin_a = criar_admin(client)
+    medico_a = client.post("/medicos/", headers=headers_admin_a, json=dados_medico()).json()
+    assert client.post("/auth/registrar", json=paciente_payload()).status_code == 201
+
+    headers_admin_b = criar_admin(client, "clinica-b", "Clínica B", "admin-b@example.com")
+    medico_b = client.post("/medicos/", headers=headers_admin_b, json=dados_medico(
+        "medico-b@example.com", "CRM-B", "Dr. Outra Clínica"
+    )).json()
+    with main.SessionLocal() as db:
+        usuario_b = db.query(main.models.Usuario).filter_by(email="admin-b@example.com").one()
+        agora = datetime.now()
+        conversa_b = main.models.AssistenteConversa(
+            clinica_id=usuario_b.clinica_id,
+            usuario_id=usuario_b.id,
+            titulo="Conversa externa",
+            ativa=True,
+            criado_em=agora,
+            atualizado_em=agora,
+        )
+        db.add(conversa_b)
+        db.commit()
+        db.refresh(conversa_b)
+        conversa_b_id = conversa_b.id
+
+    assert login(client, "paciente@example.com", "senha-forte-123", "clinica-a").status_code == 200
+    headers_paciente = headers_sessao(client)
+    monkeypatch.setattr(main, "assistente_disponivel", lambda: True)
+    monkeypatch.setattr(main, "processar_comunicacoes_agendamento", lambda *_args, **_kwargs: None)
+
+    def assistente_falso(**dados):
+        nomes = {item["name"] for item in dados["ferramentas"]}
+        assert "agendar_minha_consulta" in nomes
+        assert "gerar_grafico_meus_atendimentos" not in nomes
+        medicos = dados["executar_ferramenta"]("listar_medicos_da_clinica", {})
+        assert [item["id"] for item in medicos["medicos"]] == [medico_a["id"]]
+        assert medico_b["id"] not in [item["id"] for item in medicos["medicos"]]
+        tipo_id = next(item["id"] for item in medicos["medicos"][0]["tipos_consulta"] if not item["e_retorno"])
+        horarios = dados["executar_ferramenta"]("buscar_horarios_disponiveis", {
+            "medico_id": medico_a["id"], "data_inicio": "2099-01-05", "dias": 1,
+            "tipo_consulta_id": tipo_id,
+        })
+        assert horarios["disponibilidade"][0]["horarios"][0] == "08:00"
+        agendamento = dados["executar_ferramenta"]("agendar_minha_consulta", {
+            "medico_id": medico_a["id"], "data_hora": "2099-01-05T08:00",
+            "tipo_consulta_id": tipo_id,
+        })
+        artefato = agendamento.pop("_artefato")
+        return SimpleNamespace(
+            texto="Sua consulta foi marcada e o médico será notificado.",
+            artefatos=[artefato],
+            ferramentas_usadas=["listar_medicos_da_clinica", "buscar_horarios_disponiveis", "agendar_minha_consulta"],
+        )
+
+    monkeypatch.setattr(main, "executar_assistente", assistente_falso)
+    resposta = client.post("/assistente/mensagens", headers=headers_paciente, json={
+        "mensagem": "Marque com a Dra. Ana no primeiro horário de 5 de janeiro de 2099.",
+        "pagina": "paciente.html",
+    })
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["mensagem"]["artefatos"][0]["tipo"] == "agendamento"
+    conversa_a_id = resposta.json()["conversa_id"]
+
+    with main.SessionLocal() as db:
+        paciente_a = db.query(main.models.Paciente).filter_by(email="paciente@example.com").one()
+        marcado = db.query(main.models.Agendamento).filter_by(data_hora=datetime(2099, 1, 5, 8, 0)).one()
+        assert marcado.clinica_id == paciente_a.clinica_id
+        assert marcado.paciente_id == paciente_a.id
+        assert marcado.medico_id == medico_a["id"]
+
+    exportacao = client.get("/lgpd/meus-dados/exportar", headers=headers_paciente)
+    assert exportacao.status_code == 200
+    ids_exportados = [item["id"] for item in exportacao.json()["conversas_assistente"]]
+    assert ids_exportados == [conversa_a_id]
+    tentativa_externa = client.post("/assistente/mensagens", headers=headers_paciente, json={
+        "conversa_id": conversa_b_id, "mensagem": "Continue", "pagina": "paciente.html",
+    })
+    assert tentativa_externa.status_code == 404
+
+
+def test_assistente_medico_grafico_conta_somente_pacientes_do_profissional(client, monkeypatch):
+    headers_admin = criar_admin(client)
+    p1 = client.post("/pacientes/", headers=headers_admin, json=dados_paciente_perfil()).json()
+    p2 = client.post("/pacientes/", headers=headers_admin, json=dados_paciente_perfil(
+        "p2@example.com", "52998224725", "Paciente Dois"
+    )).json()
+    medico = client.post("/medicos/", headers=headers_admin, json=dados_medico()).json()
+    outro = client.post("/medicos/", headers=headers_admin, json=dados_medico(
+        "outro@example.com", "CRM456", "Dr. Outro"
+    )).json()
+    assert client.post("/auth/usuarios", headers=headers_admin, json={
+        "email": "medica@example.com", "password": "senha-medico-123", "role": "medico",
+    }).status_code == 201
+    with main.SessionLocal() as db:
+        mes_passado = main._inicio_mes(datetime.now(), 1)
+        clinica_id = db.query(main.models.Medico.clinica_id).filter_by(id=medico["id"]).scalar()
+        db.add_all([
+            main.models.Agendamento(
+                clinica_id=clinica_id, paciente_id=p1["id"], medico_id=medico["id"],
+                data_hora=mes_passado + timedelta(days=1, hours=8), status="Atendido",
+                tipo_consulta_nome="Consulta", duracao_minutos=30, intervalo_minutos=0,
+            ),
+            main.models.Agendamento(
+                clinica_id=clinica_id, paciente_id=p2["id"], medico_id=medico["id"],
+                data_hora=mes_passado + timedelta(days=2, hours=9), status="Atendido",
+                tipo_consulta_nome="Consulta", duracao_minutos=30, intervalo_minutos=0,
+            ),
+            main.models.Agendamento(
+                clinica_id=clinica_id, paciente_id=p1["id"], medico_id=outro["id"],
+                data_hora=mes_passado + timedelta(days=1, hours=8), status="Atendido",
+                tipo_consulta_nome="Consulta", duracao_minutos=30, intervalo_minutos=0,
+            ),
+        ])
+        db.commit()
+
+    assert login(client, "medica@example.com", "senha-medico-123").status_code == 200
+    headers_medico = headers_sessao(client)
+    monkeypatch.setattr(main, "assistente_disponivel", lambda: True)
+
+    def assistente_falso(**dados):
+        nomes = {item["name"] for item in dados["ferramentas"]}
+        assert nomes == {"consultar_ajuda_plataforma", "consultar_minha_agenda", "gerar_grafico_meus_atendimentos"}
+        resultado = dados["executar_ferramenta"]("gerar_grafico_meus_atendimentos", {"meses": 2})
+        artefato = resultado.pop("_artefato")
+        assert sum(artefato["valores"]) == 2
+        return SimpleNamespace(
+            texto="Você atendeu dois pacientes distintos no período.",
+            artefatos=[artefato],
+            ferramentas_usadas=["gerar_grafico_meus_atendimentos"],
+        )
+
+    monkeypatch.setattr(main, "executar_assistente", assistente_falso)
+    resposta = client.post("/assistente/mensagens", headers=headers_medico, json={
+        "mensagem": "Gere um gráfico dos meus pacientes dos últimos dois meses.",
+        "pagina": "medico.html",
+    })
+    assert resposta.status_code == 200, resposta.text
+    grafico = resposta.json()["mensagem"]["artefatos"][0]
+    assert grafico["tipo"] == "grafico_barras"
+    assert sum(grafico["valores"]) == 2
+
+
+def test_cliente_responses_repassa_function_call_sem_armazenar_no_provedor(monkeypatch):
+    import ai_service
+
+    chamadas_api = []
+    respostas = iter([
+        {"output": [{
+            "type": "function_call", "call_id": "call-1", "name": "consultar_ajuda_plataforma",
+            "arguments": '{"topico":"agenda"}',
+        }]},
+        {"output": [{
+            "type": "message", "role": "assistant",
+            "content": [{"type": "output_text", "text": "Abra a área Agenda profissional."}],
+        }]},
+    ])
+
+    def api_falsa(payload):
+        chamadas_api.append(payload)
+        return next(respostas)
+
+    monkeypatch.setattr(ai_service, "_chamar_responses_api", api_falsa)
+    ferramentas = main.ferramentas_do_assistente("admin")
+    for ferramenta in ferramentas:
+        esquema = ferramenta["parameters"]
+        assert esquema["additionalProperties"] is False
+        assert set(esquema["required"]) == set(esquema["properties"])
+    resultado = ai_service.executar_assistente(
+        instrucoes="Ajude sem acessar dados externos.",
+        historico=[{"role": "user", "content": "Onde configuro a agenda?"}],
+        ferramentas=ferramentas,
+        executar_ferramenta=lambda nome, argumentos: {
+            "ok": True, "nome": nome, "topico": argumentos["topico"],
+            "_artefato": {"tipo": "teste"},
+        },
+        identificador_seguranca="hash-nao-reversivel",
+    )
+    assert resultado.texto == "Abra a área Agenda profissional."
+    assert resultado.artefatos == [{"tipo": "teste"}]
+    assert chamadas_api[0]["store"] is False
+    assert chamadas_api[0]["parallel_tool_calls"] is False
+    assert chamadas_api[0]["safety_identifier"] == "hash-nao-reversivel"
+    assert chamadas_api[1]["input"][-1]["type"] == "function_call_output"
+    assert "_artefato" not in chamadas_api[1]["input"][-1]["output"]
+
+
+def test_assistente_sem_chave_informa_indisponibilidade(client):
+    headers_admin = criar_admin(client)
+    status = client.get("/assistente/status", headers=headers_admin)
+    assert status.status_code == 200
+    assert status.json()["disponivel"] is False
+    resposta = client.post("/assistente/mensagens", headers=headers_admin, json={
+        "mensagem": "Como uso o portal?", "pagina": "index.html",
+    })
+    assert resposta.status_code == 503
+    assert "ativado" in resposta.json()["detail"]
 
 
 def teardown_module():

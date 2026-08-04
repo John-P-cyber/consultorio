@@ -24,6 +24,7 @@ Crie dois ambientes separados. O recomendado é usar contas/projetos ou, no mín
 | PostgreSQL | banco e usuário exclusivos | banco e usuário exclusivos |
 | Objetos/backup | prefixo ou bucket exclusivo | bucket exclusivo, versionado |
 | Chaves, SMTP e WhatsApp | credenciais de sandbox | credenciais reais exclusivas |
+| OpenAI | projeto, chave e limites de homologação | projeto, chave, orçamento e alertas exclusivos |
 
 No PostgreSQL gerenciado, ative TLS, backups automáticos do provedor e recuperação point-in-time (PITR). Defina e registre RPO/RTO; uma meta inicial razoável precisa ser aprovada pelo negócio, por exemplo RPO de 15 minutos e RTO de 4 horas. O `pg_dump` deste projeto é uma segunda camada e não substitui o WAL/PITR do provedor.
 
@@ -44,6 +45,8 @@ Arquivos mínimos por ambiente:
 Gere `SECRET_KEY`, `MFA_MASTER_KEY`, `CLINIC_PROVISIONING_TOKEN`, senha do Grafana e `RESTIC_PASSWORD` separadamente, com um gerenciador de segredos. Não reutilize valores entre staging e produção. Guarde também uma cópia protegida de `MFA_MASTER_KEY` e `RESTIC_PASSWORD`; perdê-las impede, respectivamente, validar os autenticadores atuais e restaurar o backup externo.
 
 Configure SMTP com TLS e remetente verificado. Para a integração oficial do WhatsApp, armazene `WHATSAPP_ACCESS_TOKEN` somente no cofre de segredos e configure número, `phone_number_id`, idioma e modelos aprovados no painel de cada clínica. Habilite `COMMUNICATION_WORKER_ENABLED` em somente um processo; em instalações com várias réplicas, mova o processador para um worker dedicado mantendo a idempotência do banco.
+
+Para o BotIA, armazene `OPENAI_API_KEY` somente no ambiente do servidor, use projetos separados entre staging e produção e configure orçamento, alertas e limites de uso no provedor. Revise `AI_MODEL`, retenção e limites de mensagens antes da ativação. O navegador nunca recebe a chave; o backend chama a Responses API com `store: false` e oferece ao modelo somente ferramentas já limitadas pelo perfil e pela clínica autenticada.
 
 ## 3. Primeiro deploy manual
 
@@ -119,5 +122,7 @@ O acesso ao socket Docker dá ao Alloy visibilidade elevada sobre o host. Restri
 - [ ] capacidade, RPO, RTO, responsáveis e runbook de incidente documentados;
 - [ ] atualização periódica de imagens/dependências e varredura de vulnerabilidades definida;
 - [ ] anexos migrados para objeto privado ou protegidos pelo backup Restic testado.
+- [ ] projeto OpenAI de produção com orçamento, alertas, chave restrita e testes de abuso do BotIA;
+- [ ] política de privacidade e contrato revisados para o tratamento realizado pelo assistente e seus fornecedores.
 
 Referências oficiais: [Docker para Python](https://docs.docker.com/guides/python/), [HTTPS automático do Caddy](https://caddyserver.com/docs/automatic-https), [GitHub Environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments), [backup e PITR do PostgreSQL](https://www.postgresql.org/docs/18/backup.html), [Alertmanager](https://prometheus.io/docs/alerting/latest/configuration/) e [Grafana Alloy](https://grafana.com/docs/alloy/latest/introduction/how-alloy-works/).

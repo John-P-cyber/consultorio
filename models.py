@@ -49,6 +49,9 @@ class Clinica(Base):
         "ConfiguracaoComunicacao", back_populates="clinica", uselist=False, cascade="all, delete-orphan"
     )
     comunicacoes = relationship("Comunicacao", back_populates="clinica")
+    conversas_assistente = relationship(
+        "AssistenteConversa", back_populates="clinica", cascade="all, delete-orphan"
+    )
 
 
 class Usuario(Base):
@@ -75,6 +78,9 @@ class Usuario(Base):
     sessoes = relationship("SessaoUsuario", back_populates="usuario", cascade="all, delete-orphan")
     codigos_recuperacao_mfa = relationship(
         "MfaCodigoRecuperacao", back_populates="usuario", cascade="all, delete-orphan"
+    )
+    conversas_assistente = relationship(
+        "AssistenteConversa", back_populates="usuario", cascade="all, delete-orphan"
     )
 
     __table_args__ = (
@@ -394,7 +400,7 @@ class Comunicacao(Base):
     __table_args__ = (
         CheckConstraint("canal IN ('email', 'whatsapp')", name="ck_comunicacoes_canal"),
         CheckConstraint(
-            "evento IN ('confirmacao', 'lembrete', 'cancelamento', 'teste')",
+            "evento IN ('confirmacao', 'lembrete', 'cancelamento', 'teste', 'novo_agendamento_medico')",
             name="ck_comunicacoes_evento",
         ),
         CheckConstraint("status IN ('pendente', 'enviado', 'falhou', 'ignorado')", name="ck_comunicacoes_status"),
@@ -404,6 +410,50 @@ class Comunicacao(Base):
             name="uq_comunicacao_agendamento_canal_evento",
         ),
         Index("ix_comunicacoes_clinica_criado", "clinica_id", "criado_em"),
+    )
+
+
+class AssistenteConversa(Base):
+    __tablename__ = "assistente_conversas"
+
+    id = Column(Integer, primary_key=True)
+    clinica_id = Column(Integer, ForeignKey("clinicas.id", ondelete="CASCADE"), nullable=False, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False, index=True)
+    titulo = Column(String(120), nullable=False, default="Nova conversa")
+    ativa = Column(Boolean, nullable=False, default=True)
+    criado_em = Column(DateTime(timezone=True), nullable=False)
+    atualizado_em = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    clinica = relationship("Clinica", back_populates="conversas_assistente")
+    usuario = relationship("Usuario", back_populates="conversas_assistente")
+    mensagens = relationship(
+        "AssistenteMensagem", back_populates="conversa", cascade="all, delete-orphan",
+        order_by="AssistenteMensagem.id",
+    )
+
+    __table_args__ = (
+        Index("ix_assistente_conversa_usuario_atualizada", "clinica_id", "usuario_id", "atualizado_em"),
+    )
+
+
+class AssistenteMensagem(Base):
+    __tablename__ = "assistente_mensagens"
+
+    id = Column(Integer, primary_key=True)
+    clinica_id = Column(Integer, ForeignKey("clinicas.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversa_id = Column(
+        Integer, ForeignKey("assistente_conversas.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    papel = Column(String(20), nullable=False)
+    conteudo = Column(Text, nullable=False)
+    artefatos_json = Column(Text, nullable=True)
+    criado_em = Column(DateTime(timezone=True), nullable=False)
+
+    conversa = relationship("AssistenteConversa", back_populates="mensagens")
+
+    __table_args__ = (
+        CheckConstraint("papel IN ('user', 'assistant')", name="ck_assistente_mensagem_papel"),
+        Index("ix_assistente_mensagem_conversa_criado", "conversa_id", "criado_em"),
     )
 
 

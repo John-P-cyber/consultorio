@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -461,6 +461,48 @@ class ProcessamentoComunicacaoResponse(BaseModel):
     agendamentos_processados: int
     envios_realizados: int
     envios_com_falha: int
+
+
+class AssistenteStatusResponse(BaseModel):
+    disponivel: bool
+    modelo: Optional[str] = None
+    role: str
+
+
+class AssistenteMensagemCreate(BaseModel):
+    conversa_id: Optional[int] = Field(default=None, ge=1)
+    mensagem: str = Field(min_length=1, max_length=2000)
+    pagina: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("mensagem")
+    @classmethod
+    def normalizar_mensagem(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Digite uma mensagem.")
+        return value
+
+
+class AssistenteMensagemResponse(BaseModel):
+    id: int
+    papel: str
+    conteudo: str
+    artefatos: list[dict[str, Any]] = Field(default_factory=list)
+    criado_em: datetime
+
+
+class AssistenteConversaResponse(BaseModel):
+    id: int
+    titulo: str
+    ativo: bool
+    criado_em: datetime
+    atualizado_em: datetime
+    mensagens: list[AssistenteMensagemResponse] = Field(default_factory=list)
+
+
+class AssistenteResposta(BaseModel):
+    conversa_id: int
+    mensagem: AssistenteMensagemResponse
 
 
 class AgendamentoCreate(BaseModel):

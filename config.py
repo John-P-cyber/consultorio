@@ -68,10 +68,19 @@ COMMUNICATION_WORKER_ENABLED = os.getenv("COMMUNICATION_WORKER_ENABLED", "false"
     "1", "true", "yes", "sim"
 }
 COMMUNICATION_WORKER_INTERVAL_SECONDS = int(os.getenv("COMMUNICATION_WORKER_INTERVAL_SECONDS", "300"))
+AI_ENABLED = os.getenv("AI_ENABLED", "true").lower() in {"1", "true", "yes", "sim"}
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_BASE_URL = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+AI_MODEL = os.getenv("AI_MODEL") or "gpt-5.6-luna"
+AI_REASONING_EFFORT = os.getenv("AI_REASONING_EFFORT") or "low"
+AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS") or "45")
+AI_MAX_OUTPUT_TOKENS = int(os.getenv("AI_MAX_OUTPUT_TOKENS") or "900")
+AI_RATE_LIMIT_PER_MINUTE = int(os.getenv("AI_RATE_LIMIT_PER_MINUTE") or "12")
+AI_CONVERSATION_RETENTION_DAYS = int(os.getenv("AI_CONVERSATION_RETENTION_DAYS") or "90")
 ADMIN_BOOTSTRAP_TOKEN = os.getenv("ADMIN_BOOTSTRAP_TOKEN")
 CLINIC_PROVISIONING_TOKEN = os.getenv("CLINIC_PROVISIONING_TOKEN", ADMIN_BOOTSTRAP_TOKEN)
-TERMOS_VERSAO = os.getenv("TERMOS_VERSAO", "2026-08-01")
-PRIVACIDADE_VERSAO = os.getenv("PRIVACIDADE_VERSAO", "2026-08-01-v2")
+TERMOS_VERSAO = os.getenv("TERMOS_VERSAO", "2026-08-02")
+PRIVACIDADE_VERSAO = os.getenv("PRIVACIDADE_VERSAO", "2026-08-02")
 PRONTUARIO_RETENTION_YEARS = int(os.getenv("PRONTUARIO_RETENTION_YEARS", "20"))
 PRONTUARIO_UPLOAD_DIR = Path(
     os.getenv("PRONTUARIO_UPLOAD_DIR", str(Path(__file__).with_name("uploads") / "prontuarios"))
@@ -128,6 +137,18 @@ if not re.fullmatch(r"v[0-9]+\.[0-9]+", WHATSAPP_API_VERSION):
     raise RuntimeError("WHATSAPP_API_VERSION deve usar o formato vNN.N.")
 if COMMUNICATION_WORKER_INTERVAL_SECONDS < 60 or COMMUNICATION_WORKER_INTERVAL_SECONDS > 3600:
     raise RuntimeError("COMMUNICATION_WORKER_INTERVAL_SECONDS deve estar entre 60 e 3600.")
+if AI_REASONING_EFFORT not in {"none", "low", "medium", "high", "xhigh", "max"}:
+    raise RuntimeError("AI_REASONING_EFFORT deve ser none, low, medium, high, xhigh ou max.")
+if AI_TIMEOUT_SECONDS < 5 or AI_TIMEOUT_SECONDS > 120:
+    raise RuntimeError("AI_TIMEOUT_SECONDS deve estar entre 5 e 120.")
+if AI_MAX_OUTPUT_TOKENS < 200 or AI_MAX_OUTPUT_TOKENS > 4000:
+    raise RuntimeError("AI_MAX_OUTPUT_TOKENS deve estar entre 200 e 4000.")
+if AI_RATE_LIMIT_PER_MINUTE < 1 or AI_RATE_LIMIT_PER_MINUTE > 60:
+    raise RuntimeError("AI_RATE_LIMIT_PER_MINUTE deve estar entre 1 e 60.")
+if AI_CONVERSATION_RETENTION_DAYS < 1 or AI_CONVERSATION_RETENTION_DAYS > 365:
+    raise RuntimeError("AI_CONVERSATION_RETENTION_DAYS deve estar entre 1 e 365.")
+if PRODUCTION_LIKE and not OPENAI_BASE_URL.startswith("https://"):
+    raise RuntimeError("OPENAI_BASE_URL deve usar HTTPS em staging e produção.")
 if ACCESS_TOKEN_EXPIRE_MINUTES < 5 or ACCESS_TOKEN_EXPIRE_MINUTES > 30:
     raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES deve estar entre 5 e 30 minutos.")
 if REFRESH_TOKEN_EXPIRE_DAYS < 1 or REFRESH_TOKEN_EXPIRE_DAYS > 90:

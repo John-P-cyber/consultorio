@@ -51,6 +51,20 @@ services:
         sync: false
       - key: WHATSAPP_API_VERSION
         value: v23.0
+      - key: AI_ENABLED
+        value: "true"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: AI_MODEL
+        value: gpt-5.6-luna
+      - key: AI_REASONING_EFFORT
+        value: low
+      - key: AI_RATE_LIMIT_PER_MINUTE
+        value: "12"
+      - key: AI_CONVERSATION_RETENTION_DAYS
+        value: "90"
 
 databases:
   - name: consultorio-db

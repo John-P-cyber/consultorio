@@ -113,6 +113,19 @@ O WhatsApp usa a Cloud API oficial da Meta, nunca automação do WhatsApp Web. `
 
 No plano gratuito do Render, as portas SMTP 25, 465 e 587 são bloqueadas. Use um provedor que ofereça uma porta alternativa compatível, como 2525, ou migre o serviço para um plano pago antes de ativar e-mail em produção.
 
+## BotIA de suporte
+
+O portal autenticado inclui um chat no canto inferior direito. O BotIA usa a Responses API da OpenAI e recebe somente ferramentas previamente autorizadas para o perfil atual; o modelo não possui acesso direto ao banco. Todas as consultas continuam filtradas pelo `clinica_id` e pelo usuário autenticado.
+
+- pacientes podem listar os médicos da própria clínica, consultar horários, ver as próprias consultas e agendar em seu próprio nome;
+- médicos podem consultar apenas a própria agenda e gerar um gráfico mensal da quantidade de pacientes distintos que atenderam;
+- administradores podem consultar somente indicadores agregados da própria clínica;
+- o assistente não consulta prontuários ou exames e não executa diagnóstico, prescrição ou orientação de emergência.
+
+Configure `OPENAI_API_KEY` exclusivamente no ambiente. `AI_MODEL` usa `gpt-5.6-luna` por padrão para este fluxo de suporte de alto volume; `AI_REASONING_EFFORT`, timeout, limite de saída, limite de mensagens e retenção das conversas também são configuráveis. Se a chave não estiver presente, o widget informa que o serviço ainda não foi ativado sem impedir o restante do portal.
+
+As conversas ficam separadas por clínica e usuário, não são armazenadas pela Responses API (`store: false`), entram na exportação do titular e são removidas na exclusão ou anonimização da conta. A auditoria registra apenas as ferramentas acionadas, sem copiar o texto da conversa. A retenção local padrão é de 90 dias.
+
 ## Testes
 
 ```bash
@@ -120,7 +133,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-A suíte usa SQLite isolado e cobre cookies HttpOnly, CSRF, rotação e replay de refresh token, revogação, TOTP, códigos de recuperação, autorização, reset de senha, agenda semanal, intervalos, bloqueios, tipos de consulta, retornos, regras de cancelamento, comunicação idempotente por SMTP e WhatsApp oficial, lembretes, privacidade médico–paciente, avaliações, isolamento entre clínicas, assinatura e versionamento de prontuário, anexos e prescrições.
+A suíte usa SQLite isolado e cobre cookies HttpOnly, CSRF, rotação e replay de refresh token, revogação, TOTP, códigos de recuperação, autorização, reset de senha, agenda semanal, intervalos, bloqueios, tipos de consulta, retornos, regras de cancelamento, comunicação idempotente por SMTP e WhatsApp oficial, lembretes, BotIA com ferramentas por perfil e isolamento de conversas, privacidade médico–paciente, avaliações, isolamento entre clínicas, assinatura e versionamento de prontuário, anexos e prescrições.
 
 ## Produção
 

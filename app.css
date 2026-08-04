@@ -13,3 +13,54 @@ body.app-shell button:focus-visible { outline:3px solid rgba(37,99,235,.35); out
 .app-toast { position:fixed; right:1.5rem; bottom:1.5rem; z-index:100; max-width:min(26rem,calc(100vw - 3rem)); padding:1rem 1.15rem; border-radius:.85rem; color:#fff; background:#172033; box-shadow:0 16px 38px rgba(15,23,42,.25); animation:toast-in .2s ease-out; }
 .app-toast[data-kind="error"] { background:#b42318; }.app-toast[data-kind="success"] { background:#067647; }@keyframes toast-in { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 @media(max-width:640px) { body.app-shell nav{padding:1rem;align-items:flex-start;gap:.75rem} body.app-shell nav>div:last-child{gap:.5rem} body.app-shell nav #nome-paciente-topo,body.app-shell nav #nome-medico-topo{display:none} body.app-shell .max-w-6xl{padding:1.25rem} body.app-shell h1{font-size:1.75rem;line-height:2.1rem} }
+
+.botia-widget { position:fixed; right:1.4rem; bottom:1.4rem; z-index:90; font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; letter-spacing:0; }
+.botia-toggle { display:flex; min-width:4.2rem; height:3.6rem; margin-left:auto; align-items:center; justify-content:center; gap:.5rem; padding:0 1rem; border:0; border-radius:1.15rem; color:#fff; background:linear-gradient(135deg,#123d70,#2563eb); box-shadow:0 14px 32px rgba(30,64,175,.35); cursor:pointer; font-weight:800; }
+.botia-toggle svg { width:1.55rem; height:1.55rem; fill:currentColor; }
+.botia-toggle:hover { transform:translateY(-2px); box-shadow:0 18px 38px rgba(30,64,175,.4); }
+.botia-toggle:focus-visible,.botia-header button:focus-visible,.botia-send:focus-visible { outline:3px solid rgba(37,99,235,.3); outline-offset:3px; }
+.botia-panel { position:absolute; right:0; bottom:4.45rem; display:flex; width:min(25rem,calc(100vw - 2rem)); height:min(39rem,calc(100vh - 7rem)); flex-direction:column; overflow:hidden; border:1px solid #dce5f1; border-radius:1.35rem; color:#172033; background:#fff; box-shadow:0 24px 70px rgba(15,23,42,.22); animation:botia-in .18s ease-out; }
+.botia-panel[hidden] { display:none; }
+@keyframes botia-in { from { opacity:0; transform:translateY(12px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+.botia-header { display:flex; min-height:4.5rem; align-items:center; justify-content:space-between; gap:1rem; padding:.85rem 1rem; color:#fff; background:linear-gradient(135deg,#0b1f3a,#123d70); }
+.botia-identity { display:flex; min-width:0; align-items:center; gap:.7rem; }
+.botia-avatar { display:grid; width:2.5rem; height:2.5rem; flex:0 0 auto; place-items:center; border:1px solid rgba(255,255,255,.28); border-radius:.85rem; background:rgba(255,255,255,.13); font-size:.78rem; font-weight:900; }
+.botia-identity strong,.botia-identity span { display:block; }
+.botia-identity strong { font-size:.98rem; }
+.botia-identity div>span { margin-top:.12rem; color:#cbdcf8; font-size:.72rem; }
+.botia-header-actions { display:flex; gap:.3rem; }
+.botia-header button { display:grid; width:2rem; height:2rem; place-items:center; border:0; border-radius:.6rem; color:#fff; background:transparent; cursor:pointer; font-size:1.35rem; line-height:1; }
+.botia-header button:hover { background:rgba(255,255,255,.14); }
+.botia-privacy { margin:0; padding:.55rem 1rem; border-bottom:1px solid #e8edf4; color:#526071; background:#f7f9fc; font-size:.7rem; line-height:1.05rem; }
+.botia-messages { flex:1; overflow:auto; padding:1rem; background:linear-gradient(180deg,#f8fafc,#f4f7fb); scrollbar-color:#c5cfdd transparent; }
+.botia-message { display:flex; margin-bottom:.85rem; flex-direction:column; align-items:flex-start; }
+.botia-message-user { align-items:flex-end; }
+.botia-bubble { max-width:88%; padding:.7rem .85rem; border:1px solid #e1e7ef; border-radius:.35rem 1rem 1rem 1rem; color:#27364a; background:#fff; box-shadow:0 3px 10px rgba(15,23,42,.045); font-size:.86rem; line-height:1.32rem; white-space:pre-wrap; overflow-wrap:anywhere; }
+.botia-message-user .botia-bubble { border-color:#2563eb; border-radius:1rem .35rem 1rem 1rem; color:#fff; background:#2563eb; }
+.botia-time { margin:.25rem .3rem 0; color:#8994a5; font-size:.62rem; }
+.botia-loading .botia-bubble { color:#667085; }
+.botia-loading .botia-bubble::after { content:""; display:inline-block; width:.75rem; height:.25rem; margin-left:.35rem; border-radius:1rem; background:linear-gradient(90deg,#94a3b8 30%,transparent 30% 45%,#94a3b8 45% 70%,transparent 70%); animation:botia-pulse 1s infinite; }
+@keyframes botia-pulse { 50% { opacity:.35; } }
+.botia-artifact { width:min(94%,22rem); margin-top:.45rem; padding:.8rem; border:1px solid #dbe5f2; border-radius:1rem; background:#fff; box-shadow:0 5px 15px rgba(15,23,42,.06); }
+.botia-artifact-title { margin:0 0 .65rem; color:#123d70; font-size:.78rem; font-weight:850; }
+.botia-bars { display:grid; gap:.48rem; }
+.botia-bar-row { display:grid; grid-template-columns:3rem 1fr 1.6rem; align-items:center; gap:.45rem; font-size:.67rem; }
+.botia-bar-label { color:#536174; text-transform:capitalize; }
+.botia-bar-track { height:.55rem; overflow:hidden; border-radius:1rem; background:#eaf0f8; }
+.botia-bar-fill { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#2563eb,#60a5fa); }
+.botia-bar-value { color:#1f3553; text-align:right; }
+.botia-artifact-note { margin:.65rem 0 0; color:#667085; font-size:.64rem; line-height:.95rem; }
+.botia-details { display:grid; margin:0; gap:.42rem; }
+.botia-detail { display:flex; justify-content:space-between; gap:1rem; padding-bottom:.38rem; border-bottom:1px solid #edf1f6; font-size:.72rem; }
+.botia-detail:last-child { padding-bottom:0; border:0; }
+.botia-detail dt { color:#667085; }
+.botia-detail dd { margin:0; color:#24364e; text-align:right; font-weight:700; }
+.botia-composer { display:flex; align-items:flex-end; gap:.55rem; padding:.75rem; border-top:1px solid #e3e9f1; background:#fff; }
+.botia-composer textarea { width:100%; min-height:2.75rem; max-height:7rem; resize:vertical; padding:.72rem .8rem; border:1px solid #d6deea; border-radius:.85rem; color:#172033; background:#fbfcfe; font:inherit; font-size:.84rem; line-height:1.2rem; }
+.botia-composer textarea:focus { outline:0; border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+.botia-send { display:grid; width:2.75rem; height:2.75rem; flex:0 0 auto; place-items:center; border:0; border-radius:.85rem; color:#fff; background:#2563eb; cursor:pointer; }
+.botia-send svg { width:1.2rem; height:1.2rem; fill:currentColor; }
+.botia-send:disabled,.botia-composer textarea:disabled { cursor:wait; opacity:.6; }
+body:has(.botia-widget) .app-toast { bottom:6rem; }
+@media(max-width:640px) { .botia-widget{right:.75rem;bottom:.75rem}.botia-panel{right:-.1rem;bottom:4.2rem;width:calc(100vw - 1.3rem);height:min(42rem,calc(100dvh - 5.7rem));border-radius:1.15rem}.botia-toggle{height:3.35rem;min-width:3.35rem;padding:0 .85rem}.botia-toggle span{display:none}body:has(.botia-widget) .app-toast{right:.75rem;bottom:5.3rem;max-width:calc(100vw - 1.5rem)} }
+@media(prefers-reduced-motion:reduce) { .botia-panel,.botia-loading .botia-bubble::after{animation:none}.botia-toggle{transition:none} }

@@ -34,6 +34,9 @@ Se o serviço `consultorio` já existe, crie primeiro um **Render Postgres** na 
 | `WHATSAPP_ACCESS_TOKEN` | token permanente protegido da Meta Business |
 | `WHATSAPP_API_VERSION` | versão suportada, por exemplo `v23.0` |
 | `COMMUNICATION_WORKER_ENABLED` | `true` em uma única instância |
+| `OPENAI_API_KEY` | chave secreta de projeto da OpenAI, sem expor no frontend |
+| `AI_ENABLED` | `true` para habilitar o BotIA |
+| `AI_MODEL` | `gpt-5.6-luna` para o fluxo padrão de suporte |
 
 Não reutilize os três segredos. Depois escolha **Save, rebuild, and deploy**. Não é necessário cadastrar `PORT`, `ALLOWED_ORIGINS` nem `RESET_URL` no Render.
 
@@ -48,6 +51,7 @@ A configuração gratuita é adequada apenas para demonstração:
 - o PostgreSQL gratuito expira após 30 dias, tem 1 GB e não possui backup;
 - as portas SMTP comuns `25`, `465` e `587` são bloqueadas, então recuperação, confirmações, lembretes e cancelamentos por e-mail exigem um provedor que ofereça outra porta compatível, como `2525`, ou um Web Service pago;
 - o worker interno de lembretes depende de a instância estar acordada; o plano gratuito pode atrasar lembretes após períodos de inatividade e serve apenas para demonstração.
+- o consumo do BotIA é cobrado separadamente pela OpenAI e depende de uma chave com faturamento e limites configurados no projeto correspondente.
 
 Antes de atender clientes reais, migre para Web Service e PostgreSQL pagos, armazenamento de objetos privado para anexos, SMTP/transacional funcional, backup testado, monitoramento e ambientes separados. O guia de produção continua sendo [PRODUCTION.md](PRODUCTION.md).
 
