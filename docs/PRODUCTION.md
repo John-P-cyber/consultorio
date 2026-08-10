@@ -46,7 +46,7 @@ Gere `SECRET_KEY`, `MFA_MASTER_KEY`, `CLINIC_PROVISIONING_TOKEN`, senha do Grafa
 
 Configure SMTP com TLS e remetente verificado. Para a integração oficial do WhatsApp, armazene `WHATSAPP_ACCESS_TOKEN` somente no cofre de segredos e configure número, `phone_number_id`, idioma e modelos aprovados no painel de cada clínica. Habilite `COMMUNICATION_WORKER_ENABLED` em somente um processo; em instalações com várias réplicas, mova o processador para um worker dedicado mantendo a idempotência do banco.
 
-O BotIA usa `AI_PROVIDER=local` por padrão e não envia conversas a uma API de IA. Revise os fluxos reconhecidos, a retenção e os limites de mensagens antes da ativação. Se uma integração externa for habilitada futuramente, mantenha a chave somente no servidor, use projetos separados entre staging e produção, configure orçamento e limites e atualize contratos e avisos de privacidade. O navegador nunca deve receber credenciais de provedor.
+O deploy de demonstração pode usar `AI_PROVIDER=gemini` com a cota gratuita. Mantenha `GEMINI_API_KEY` somente no servidor, limite as mensagens e não envie prontuários, exames, credenciais ou orientação clínica ao modelo. A modalidade gratuita não oferece as mesmas garantias contratuais e de tratamento de dados de um serviço pago empresarial; para operação comercial com dados reais, faça avaliação jurídica e de segurança antes de mantê-la. `AI_PROVIDER=local` permanece disponível como alternativa sem compartilhamento externo. O navegador nunca deve receber credenciais de provedor.
 
 ## 3. Primeiro deploy manual
 
@@ -122,7 +122,7 @@ O acesso ao socket Docker dá ao Alloy visibilidade elevada sobre o host. Restri
 - [ ] capacidade, RPO, RTO, responsáveis e runbook de incidente documentados;
 - [ ] atualização periódica de imagens/dependências e varredura de vulnerabilidades definida;
 - [ ] anexos migrados para objeto privado ou protegidos pelo backup Restic testado.
-- [ ] modo local do BotIA testado com cada perfil, incluindo pedidos ambíguos, acesso indevido e agendamentos;
+- [ ] provedor do BotIA, termos de tratamento, cotas e chave restrita revisados; cada perfil testado com pedidos ambíguos, acesso indevido e agendamentos;
 - [ ] política de privacidade e contrato revisados para o tratamento realizado pelo assistente e seus fornecedores.
 
 Referências oficiais: [Docker para Python](https://docs.docker.com/guides/python/), [HTTPS automático do Caddy](https://caddyserver.com/docs/automatic-https), [GitHub Environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments), [backup e PITR do PostgreSQL](https://www.postgresql.org/docs/18/backup.html), [Alertmanager](https://prometheus.io/docs/alerting/latest/configuration/) e [Grafana Alloy](https://grafana.com/docs/alloy/latest/introduction/how-alloy-works/).

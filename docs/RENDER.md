@@ -35,7 +35,9 @@ Se o serviço `consultorio` já existe, crie primeiro um **Render Postgres** na 
 | `WHATSAPP_API_VERSION` | versão suportada, por exemplo `v23.0` |
 | `COMMUNICATION_WORKER_ENABLED` | `true` em uma única instância |
 | `AI_ENABLED` | `true` para habilitar o BotIA |
-| `AI_PROVIDER` | `local` para o assistente gratuito sem API externa |
+| `AI_PROVIDER` | `gemini` para usar a API gratuita configurada |
+| `GEMINI_API_KEY` | chave secreta criada no Google AI Studio |
+| `GEMINI_MODEL` | `gemini-3.6-flash` |
 
 Não reutilize os três segredos. Depois escolha **Save, rebuild, and deploy**. Não é necessário cadastrar `PORT`, `ALLOWED_ORIGINS` nem `RESET_URL` no Render.
 
@@ -50,7 +52,8 @@ A configuração gratuita é adequada apenas para demonstração:
 - o PostgreSQL gratuito expira após 30 dias, tem 1 GB e não possui backup;
 - as portas SMTP comuns `25`, `465` e `587` são bloqueadas, então recuperação, confirmações, lembretes e cancelamentos por e-mail exigem um provedor que ofereça outra porta compatível, como `2525`, ou um Web Service pago;
 - o worker interno de lembretes depende de a instância estar acordada; o plano gratuito pode atrasar lembretes após períodos de inatividade e serve apenas para demonstração.
-- o BotIA em `AI_PROVIDER=local` não gera cobrança por conversa e não depende de chave externa; sua compreensão fica limitada às dúvidas e operações implementadas no portal.
+- o BotIA em `AI_PROVIDER=gemini` depende da disponibilidade e dos limites da cota gratuita do Google; o conteúdo processado nessa modalidade pode ser utilizado para melhoria dos produtos do provedor;
+- `AI_PROVIDER=local` continua disponível sem chave e sem envio a fornecedor externo, porém com compreensão limitada aos fluxos implementados.
 
 Antes de atender clientes reais, migre para Web Service e PostgreSQL pagos, armazenamento de objetos privado para anexos, SMTP/transacional funcional, backup testado, monitoramento e ambientes separados. O guia de produção continua sendo [PRODUCTION.md](PRODUCTION.md).
 

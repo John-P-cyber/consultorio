@@ -115,16 +115,16 @@ No plano gratuito do Render, as portas SMTP 25, 465 e 587 são bloqueadas. Use u
 
 ## BotIA de suporte
 
-O portal autenticado inclui um chat no canto inferior direito. Por padrão, o BotIA funciona no modo `local`: um assistente determinístico, sem API externa, mensalidade ou cobrança por conversa. Ele reconhece as solicitações suportadas e aciona somente ferramentas previamente autorizadas para o perfil atual. Todas as consultas continuam filtradas pelo `clinica_id` e pelo usuário autenticado.
+O portal autenticado inclui um chat no canto inferior direito. No deploy de demonstração, o BotIA usa o Gemini por meio da camada oficial compatível com Chat Completions. O modelo decide quando acionar as ferramentas previamente autorizadas para o perfil atual; ele não possui acesso direto ao banco. Todas as consultas continuam filtradas pelo `clinica_id` e pelo usuário autenticado.
 
 - pacientes podem listar os médicos da própria clínica, consultar horários, ver as próprias consultas e agendar em seu próprio nome;
 - médicos podem consultar apenas a própria agenda e gerar um gráfico mensal da quantidade de pacientes distintos que atenderam;
 - administradores podem consultar somente indicadores agregados da própria clínica;
 - o assistente não consulta prontuários ou exames e não executa diagnóstico, prescrição ou orientação de emergência.
 
-Use `AI_PROVIDER=local` para manter o funcionamento gratuito. Esse modo cobre as dúvidas documentadas e operações acima, mas não tenta responder livremente sobre assuntos desconhecidos. A integração OpenAI permanece opcional para uma fase futura: somente nesse caso use `AI_PROVIDER=openai` e configure `OPENAI_API_KEY` exclusivamente no servidor. Limite de mensagens e retenção das conversas continuam configuráveis.
+Use `AI_PROVIDER=gemini`, `GEMINI_MODEL=gemini-3.6-flash` e configure `GEMINI_API_KEY` exclusivamente no servidor. A cota gratuita possui limites e pode ficar temporariamente indisponível; ao atingi-los, o portal mantém as demais funções e retorna um erro seguro no chat. `AI_PROVIDER=local` continua disponível como alternativa sem fornecedor externo, e `AI_PROVIDER=openai` permanece opcional. Limite de mensagens e retenção das conversas continuam configuráveis.
 
-As conversas ficam separadas por clínica e usuário, entram na exportação do titular e são removidas na exclusão ou anonimização da conta. No modo local, nenhuma mensagem é enviada a um fornecedor de IA. Se o modo OpenAI for habilitado futuramente, as chamadas usam `store: false`. A auditoria registra apenas as ferramentas acionadas, sem copiar o texto da conversa. A retenção local padrão é de 90 dias.
+As conversas ficam separadas por clínica e usuário, entram na exportação do titular e são removidas na exclusão ou anonimização da conta. No modo Gemini, mensagens e resultados operacionais mínimos são processados pelo Google conforme os termos da cota utilizada; não envie dados clínicos, senhas ou documentos pelo chat. No modo local, nenhuma mensagem é enviada a um fornecedor. A auditoria registra apenas as ferramentas acionadas, sem copiar o texto da conversa. A retenção local padrão é de 90 dias.
 
 ## Testes
 

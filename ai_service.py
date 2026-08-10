@@ -21,6 +21,9 @@ from config import (
     AI_PROVIDER,
     AI_REASONING_EFFORT,
     AI_TIMEOUT_SECONDS,
+    GEMINI_API_KEY,
+    GEMINI_BASE_URL,
+    GEMINI_MODEL,
     OPENAI_API_KEY,
     OPENAI_BASE_URL,
 )
@@ -46,13 +49,17 @@ def assistente_disponivel() -> bool:
         return False
     if AI_PROVIDER == "local":
         return True
+    if AI_PROVIDER == "gemini":
+        return bool(GEMINI_API_KEY)
     return bool(OPENAI_API_KEY)
 
 
 def modelo_assistente_ativo() -> str | None:
     if not assistente_disponivel():
         return None
-    return "local-gratuito" if AI_PROVIDER == "local" else AI_MODEL
+    if AI_PROVIDER == "local":
+        return "local-gratuito"
+    return GEMINI_MODEL if AI_PROVIDER == "gemini" else AI_MODEL
 
 
 def _normalizar_texto(valor: Any) -> str:
@@ -363,6 +370,143 @@ def _executar_assistente_local(
     return ResultadoAssistente("Não encontrei uma operação disponível para o seu perfil.", artefatos, usadas)
 
 
+def _chamar_gemini_chat(payload: dict[str, Any]) -> dict[str, Any]:
+    if AI_PROVIDER != "gemini" or not assistente_disponivel():
+        raise AssistenteNaoConfigurado(
+            "O provedor Gemini ainda não foi ativado. Configure AI_PROVIDER=gemini e GEMINI_API_KEY."
+        )
+    requisicao = request.Request(
+        f"{GEMINI_BASE_URL}/chat/completions",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {GEMINI_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "consultorio-assistente/1.0",
+        },
+        method="POST",
+    )
+    try:
+        with request.urlopen(requisicao, timeout=AI_TIMEOUT_SECONDS) as resposta:
+            return json.loads(resposta.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        if exc.code in {401, 403}:
+            mensagem = "A chave do Gemini foi recusada ou não possui permissão para este modelo."
+        elif exc.code == 429:
+            mensagem = "O limite gratuito do Gemini foi atingido. Tente novamente mais tarde."
+        elif exc.code == 400:
+            mensagem = "O Gemini recusou a configuração da solicitação. Verifique o modelo e a chave."
+        else:
+            mensagem = f"O Gemini não concluiu a solicitação (HTTP {exc.code})."
+        raise FalhaAssistente(mensagem) from exc
+    except (error.URLError, TimeoutError, OSError, ValueError) as exc:
+        raise FalhaAssistente("Não foi possível acessar o Gemini neste momento.") from exc
+
+
+def _schema_compativel_gemini(valor: Any) -> Any:
+    if isinstance(valor, list):
+        return [_schema_compativel_gemini(item) for item in valor]
+    if not isinstance(valor, dict):
+        return valor
+    convertido = {
+        chave: _schema_compativel_gemini(conteudo)
+        for chave, conteudo in valor.items()
+        if chave != "additionalProperties"
+    }
+    tipos = convertido.get("type")
+    if isinstance(tipos, list) and "null" in tipos:
+        restantes = [item for item in tipos if item != "null"]
+        convertido["type"] = restantes[0] if len(restantes) == 1 else restantes
+        convertido["nullable"] = True
+    return convertido
+
+
+def _ferramentas_compativeis_gemini(ferramentas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{
+        "type": "function",
+        "function": {
+            "name": ferramenta["name"],
+            "description": ferramenta.get("description") or "",
+            "parameters": _schema_compativel_gemini(ferramenta.get("parameters") or {}),
+        },
+    } for ferramenta in ferramentas]
+
+
+def _texto_mensagem_chat(mensagem: dict[str, Any]) -> str:
+    conteudo = mensagem.get("content")
+    if isinstance(conteudo, str):
+        return conteudo.strip()
+    if isinstance(conteudo, list):
+        return "\n".join(
+            str(item.get("text") or "") for item in conteudo
+            if isinstance(item, dict) and item.get("text")
+        ).strip()
+    return ""
+
+
+def _executar_assistente_gemini(
+    *,
+    instrucoes: str,
+    historico: list[dict[str, str]],
+    ferramentas: list[dict[str, Any]],
+    executar_ferramenta: Callable[[str, dict[str, Any]], dict[str, Any]],
+) -> ResultadoAssistente:
+    mensagens: list[dict[str, Any]] = [{"role": "system", "content": instrucoes}]
+    mensagens.extend({"role": item["role"], "content": item["content"]} for item in historico)
+    ferramentas_gemini = _ferramentas_compativeis_gemini(ferramentas)
+    artefatos: list[dict[str, Any]] = []
+    usadas: list[str] = []
+    total_chamadas = 0
+
+    for _ in range(3):
+        esforco = AI_REASONING_EFFORT if AI_REASONING_EFFORT in {"low", "medium", "high"} else "low"
+        payload = {
+            "model": GEMINI_MODEL,
+            "messages": mensagens,
+            "tools": ferramentas_gemini,
+            "tool_choice": "auto",
+            "reasoning_effort": esforco,
+            "max_tokens": AI_MAX_OUTPUT_TOKENS,
+        }
+        resposta = _chamar_gemini_chat(payload)
+        escolhas = resposta.get("choices") or []
+        if not escolhas or not isinstance(escolhas[0].get("message"), dict):
+            raise FalhaAssistente("O Gemini não produziu uma resposta válida.")
+        mensagem_modelo = escolhas[0]["message"]
+        chamadas = mensagem_modelo.get("tool_calls") or []
+        if not chamadas:
+            texto = _texto_mensagem_chat(mensagem_modelo)
+            if not texto:
+                raise FalhaAssistente("O Gemini não produziu uma resposta em texto.")
+            return ResultadoAssistente(texto=texto, artefatos=artefatos, ferramentas_usadas=usadas)
+
+        mensagens.append(mensagem_modelo)
+        for chamada in chamadas:
+            total_chamadas += 1
+            if total_chamadas > 6:
+                raise FalhaAssistente("A solicitação exigiu operações demais. Divida-a em perguntas menores.")
+            funcao = chamada.get("function") or {}
+            nome = str(funcao.get("name") or "")
+            usadas.append(nome)
+            try:
+                argumentos = json.loads(funcao.get("arguments") or "{}")
+                if not isinstance(argumentos, dict):
+                    raise ValueError
+                resultado = executar_ferramenta(nome, argumentos)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                resultado = {"ok": False, "erro": "Os argumentos da ferramenta são inválidos."}
+            artefato = resultado.pop("_artefato", None)
+            if isinstance(artefato, dict):
+                artefatos.append(artefato)
+            mensagens.append({
+                "role": "tool",
+                "tool_call_id": chamada.get("id"),
+                "name": nome,
+                "content": json.dumps(resultado, ensure_ascii=False, separators=(",", ":")),
+            })
+
+    raise FalhaAssistente("O Gemini não conseguiu concluir a solicitação com segurança.")
+
+
 def _texto_da_resposta(resposta: dict[str, Any]) -> str:
     partes: list[str] = []
     for item in resposta.get("output") or []:
@@ -417,6 +561,13 @@ def executar_assistente(
         raise AssistenteNaoConfigurado("O assistente foi desativado pelo administrador da plataforma.")
     if AI_PROVIDER == "local":
         return _executar_assistente_local(
+            historico=historico,
+            ferramentas=ferramentas,
+            executar_ferramenta=executar_ferramenta,
+        )
+    if AI_PROVIDER == "gemini":
+        return _executar_assistente_gemini(
+            instrucoes=instrucoes,
             historico=historico,
             ferramentas=ferramentas,
             executar_ferramenta=executar_ferramenta,

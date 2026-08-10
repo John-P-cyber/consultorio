@@ -1081,6 +1081,65 @@ def test_assistente_medico_grafico_conta_somente_pacientes_do_profissional(clien
     assert sum(grafico["valores"]) == 2
 
 
+def test_cliente_gemini_executa_ferramenta_sem_expor_artefato(monkeypatch):
+    import ai_service
+
+    monkeypatch.setattr(ai_service, "AI_PROVIDER", "gemini")
+    monkeypatch.setattr(ai_service, "AI_ENABLED", True)
+    monkeypatch.setattr(ai_service, "GEMINI_API_KEY", "chave-gemini-de-teste")
+    chamadas_api = []
+    respostas = iter([
+        {"choices": [{"message": {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "gemini-call-1",
+                "type": "function",
+                "function": {"name": "listar_medicos_da_clinica", "arguments": "{}"},
+            }],
+        }}]},
+        {"choices": [{"message": {
+            "role": "assistant",
+            "content": "Encontrei a Dra. Ana na sua clínica.",
+        }}]},
+    ])
+
+    def gemini_falso(payload):
+        chamadas_api.append(payload)
+        return next(respostas)
+
+    monkeypatch.setattr(ai_service, "_chamar_gemini_chat", gemini_falso)
+    resultado = ai_service.executar_assistente(
+        instrucoes="Use apenas ferramentas autorizadas.",
+        historico=[{"role": "user", "content": "Quais médicos atendem aqui?"}],
+        ferramentas=main.ferramentas_do_assistente("paciente"),
+        executar_ferramenta=lambda nome, _argumentos: {
+            "ok": True,
+            "nome": nome,
+            "medicos": [{"id": 1, "nome": "Dra. Ana"}],
+            "_artefato": {"tipo": "teste-gemini"},
+        },
+        identificador_seguranca="hash-nao-enviado",
+    )
+    assert resultado.texto == "Encontrei a Dra. Ana na sua clínica."
+    assert resultado.artefatos == [{"tipo": "teste-gemini"}]
+    assert resultado.ferramentas_usadas == ["listar_medicos_da_clinica"]
+    assert chamadas_api[0]["messages"][0]["role"] == "system"
+    assert chamadas_api[0]["tools"][0]["type"] == "function"
+    assert chamadas_api[1]["messages"][-1]["role"] == "tool"
+    assert "_artefato" not in chamadas_api[1]["messages"][-1]["content"]
+    buscar_horarios = next(
+        item for item in chamadas_api[0]["tools"]
+        if item["function"]["name"] == "buscar_horarios_disponiveis"
+    )
+    tipo_schema = buscar_horarios["function"]["parameters"]["properties"]["tipo_consulta_id"]
+    assert tipo_schema == {
+        "type": "integer",
+        "description": "ID do tipo de consulta ou null para a consulta padrão.",
+        "nullable": True,
+    }
+
+
 def test_cliente_responses_repassa_function_call_sem_armazenar_no_provedor(monkeypatch):
     import ai_service
 

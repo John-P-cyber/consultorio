@@ -54,7 +54,13 @@ services:
       - key: AI_ENABLED
         value: "true"
       - key: AI_PROVIDER
-        value: local
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
       - key: AI_RATE_LIMIT_PER_MINUTE
         value: "12"
       - key: AI_CONVERSATION_RETENTION_DAYS

@@ -70,6 +70,11 @@ COMMUNICATION_WORKER_ENABLED = os.getenv("COMMUNICATION_WORKER_ENABLED", "false"
 COMMUNICATION_WORKER_INTERVAL_SECONDS = int(os.getenv("COMMUNICATION_WORKER_INTERVAL_SECONDS", "300"))
 AI_ENABLED = os.getenv("AI_ENABLED", "true").lower() in {"1", "true", "yes", "sim"}
 AI_PROVIDER = (os.getenv("AI_PROVIDER") or "local").strip().lower()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_BASE_URL = (
+    os.getenv("GEMINI_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta/openai"
+).rstrip("/")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.6-flash"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL") or "gpt-5.6-luna"
@@ -81,7 +86,7 @@ AI_CONVERSATION_RETENTION_DAYS = int(os.getenv("AI_CONVERSATION_RETENTION_DAYS")
 ADMIN_BOOTSTRAP_TOKEN = os.getenv("ADMIN_BOOTSTRAP_TOKEN")
 CLINIC_PROVISIONING_TOKEN = os.getenv("CLINIC_PROVISIONING_TOKEN", ADMIN_BOOTSTRAP_TOKEN)
 TERMOS_VERSAO = os.getenv("TERMOS_VERSAO", "2026-08-02")
-PRIVACIDADE_VERSAO = os.getenv("PRIVACIDADE_VERSAO", "2026-08-02")
+PRIVACIDADE_VERSAO = os.getenv("PRIVACIDADE_VERSAO", "2026-08-10-gemini")
 PRONTUARIO_RETENTION_YEARS = int(os.getenv("PRONTUARIO_RETENTION_YEARS", "20"))
 PRONTUARIO_UPLOAD_DIR = Path(
     os.getenv("PRONTUARIO_UPLOAD_DIR", str(Path(__file__).with_name("uploads") / "prontuarios"))
@@ -138,8 +143,8 @@ if not re.fullmatch(r"v[0-9]+\.[0-9]+", WHATSAPP_API_VERSION):
     raise RuntimeError("WHATSAPP_API_VERSION deve usar o formato vNN.N.")
 if COMMUNICATION_WORKER_INTERVAL_SECONDS < 60 or COMMUNICATION_WORKER_INTERVAL_SECONDS > 3600:
     raise RuntimeError("COMMUNICATION_WORKER_INTERVAL_SECONDS deve estar entre 60 e 3600.")
-if AI_PROVIDER not in {"local", "openai"}:
-    raise RuntimeError("AI_PROVIDER deve ser 'local' ou 'openai'.")
+if AI_PROVIDER not in {"local", "gemini", "openai"}:
+    raise RuntimeError("AI_PROVIDER deve ser 'local', 'gemini' ou 'openai'.")
 if AI_REASONING_EFFORT not in {"none", "low", "medium", "high", "xhigh", "max"}:
     raise RuntimeError("AI_REASONING_EFFORT deve ser none, low, medium, high, xhigh ou max.")
 if AI_TIMEOUT_SECONDS < 5 or AI_TIMEOUT_SECONDS > 120:
@@ -152,6 +157,8 @@ if AI_CONVERSATION_RETENTION_DAYS < 1 or AI_CONVERSATION_RETENTION_DAYS > 365:
     raise RuntimeError("AI_CONVERSATION_RETENTION_DAYS deve estar entre 1 e 365.")
 if PRODUCTION_LIKE and not OPENAI_BASE_URL.startswith("https://"):
     raise RuntimeError("OPENAI_BASE_URL deve usar HTTPS em staging e produção.")
+if PRODUCTION_LIKE and not GEMINI_BASE_URL.startswith("https://"):
+    raise RuntimeError("GEMINI_BASE_URL deve usar HTTPS em staging e produção.")
 if ACCESS_TOKEN_EXPIRE_MINUTES < 5 or ACCESS_TOKEN_EXPIRE_MINUTES > 30:
     raise RuntimeError("ACCESS_TOKEN_EXPIRE_MINUTES deve estar entre 5 e 30 minutos.")
 if REFRESH_TOKEN_EXPIRE_DAYS < 1 or REFRESH_TOKEN_EXPIRE_DAYS > 90:
