@@ -24,6 +24,7 @@ from config import (
     GEMINI_API_KEY,
     GEMINI_BASE_URL,
     GEMINI_MODEL,
+    GEMINI_TEMPERATURE,
     OPENAI_API_KEY,
     OPENAI_BASE_URL,
 )
@@ -466,6 +467,7 @@ def _executar_assistente_gemini(
             "tool_choice": "auto",
             "reasoning_effort": esforco,
             "max_tokens": AI_MAX_OUTPUT_TOKENS,
+            "temperature": GEMINI_TEMPERATURE,
         }
         resposta = _chamar_gemini_chat(payload)
         escolhas = resposta.get("choices") or []

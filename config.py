@@ -75,6 +75,7 @@ GEMINI_BASE_URL = (
     os.getenv("GEMINI_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta/openai"
 ).rstrip("/")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL") or "gemini-3.6-flash"
+GEMINI_TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE") or "0.45")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL") or "gpt-5.6-luna"
@@ -155,6 +156,8 @@ if AI_RATE_LIMIT_PER_MINUTE < 1 or AI_RATE_LIMIT_PER_MINUTE > 60:
     raise RuntimeError("AI_RATE_LIMIT_PER_MINUTE deve estar entre 1 e 60.")
 if AI_CONVERSATION_RETENTION_DAYS < 1 or AI_CONVERSATION_RETENTION_DAYS > 365:
     raise RuntimeError("AI_CONVERSATION_RETENTION_DAYS deve estar entre 1 e 365.")
+if GEMINI_TEMPERATURE < 0 or GEMINI_TEMPERATURE > 1:
+    raise RuntimeError("GEMINI_TEMPERATURE deve estar entre 0 e 1.")
 if PRODUCTION_LIKE and not OPENAI_BASE_URL.startswith("https://"):
     raise RuntimeError("OPENAI_BASE_URL deve usar HTTPS em staging e produção.")
 if PRODUCTION_LIKE and not GEMINI_BASE_URL.startswith("https://"):

@@ -261,9 +261,9 @@
         const mostrarBoasVindas = () => {
             limparMensagens();
             const textos = {
-                paciente: 'Olá! Posso mostrar médicos e horários, consultar suas próximas consultas e ajudar a agendar. Não envie dados clínicos, documentos ou senhas pelo chat.',
-                medico: 'Olá! Posso consultar sua agenda e gerar gráficos dos seus próprios atendimentos. Não envie dados clínicos, documentos ou senhas pelo chat.',
-                admin: 'Olá! Posso explicar o portal e apresentar um resumo operacional da sua clínica. Não envie dados clínicos, documentos ou senhas pelo chat.'
+                paciente: 'Oi! Estou por aqui para facilitar sua vida. Posso encontrar médicos e horários, consultar suas próximas consultas ou ajudar com um agendamento. Só não envie dados clínicos, documentos ou senhas pelo chat, combinado?',
+                medico: 'Oi! Posso ajudar a consultar sua agenda e acompanhar seus atendimentos com gráficos. Só não envie dados clínicos, documentos ou senhas pelo chat, combinado?',
+                admin: 'Oi! Posso explicar o portal e ajudar a entender o movimento da sua clínica. Só não envie dados clínicos, documentos ou senhas pelo chat, combinado?'
             };
             adicionarMensagem('assistant', statusAssistente.disponivel
                 ? (textos[statusAssistente.role] || 'Olá! Como posso ajudar com o portal?')

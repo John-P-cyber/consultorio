@@ -38,6 +38,7 @@ Se o serviço `consultorio` já existe, crie primeiro um **Render Postgres** na 
 | `AI_PROVIDER` | `gemini` para usar a API gratuita configurada |
 | `GEMINI_API_KEY` | chave secreta criada no Google AI Studio |
 | `GEMINI_MODEL` | `gemini-3.6-flash` |
+| `GEMINI_TEMPERATURE` | `0.45` para equilibrar naturalidade e previsibilidade |
 
 Não reutilize os três segredos. Depois escolha **Save, rebuild, and deploy**. Não é necessário cadastrar `PORT`, `ALLOWED_ORIGINS` nem `RESET_URL` no Render.
 

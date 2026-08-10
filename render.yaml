@@ -61,6 +61,8 @@ services:
         value: https://generativelanguage.googleapis.com/v1beta/openai
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
+      - key: GEMINI_TEMPERATURE
+        value: "0.45"
       - key: AI_RATE_LIMIT_PER_MINUTE
         value: "12"
       - key: AI_CONVERSATION_RETENTION_DAYS

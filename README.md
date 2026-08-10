@@ -117,6 +117,8 @@ No plano gratuito do Render, as portas SMTP 25, 465 e 587 são bloqueadas. Use u
 
 O portal autenticado inclui um chat no canto inferior direito. No deploy de demonstração, o BotIA usa o Gemini por meio da camada oficial compatível com Chat Completions. O modelo decide quando acionar as ferramentas previamente autorizadas para o perfil atual; ele não possui acesso direto ao banco. Todas as consultas continuam filtradas pelo `clinica_id` e pelo usuário autenticado.
 
+O tom do assistente é conversacional e adaptado ao contexto: ele reconhece o pedido antes de orientar, usa o primeiro nome com moderação, faz somente uma pergunta de esclarecimento por vez e sugere o próximo passo útil. Naturalidade nunca substitui validação: ações só são confirmadas depois do sucesso da ferramenta correspondente.
+
 - pacientes podem listar os médicos da própria clínica, consultar horários, ver as próprias consultas e agendar em seu próprio nome;
 - médicos podem consultar apenas a própria agenda e gerar um gráfico mensal da quantidade de pacientes distintos que atenderam;
 - administradores podem consultar somente indicadores agregados da própria clínica;

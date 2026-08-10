@@ -1081,6 +1081,21 @@ def test_assistente_medico_grafico_conta_somente_pacientes_do_profissional(clien
     assert sum(grafico["valores"]) == 2
 
 
+def test_personalidade_assistente_e_humana_sem_relaxar_confirmacoes():
+    usuario = SimpleNamespace(
+        role="paciente",
+        paciente=SimpleNamespace(nome="Maria da Silva"),
+        medico=None,
+        clinica=SimpleNamespace(nome="Clínica Teste"),
+    )
+    instrucoes = main.instrucoes_do_assistente(usuario, "paciente.html", None)
+    assert "atencioso, confiável e natural" in instrucoes
+    assert "primeiro nome: Maria" in instrucoes
+    assert "uma única pergunta objetiva por vez" in instrucoes
+    assert "nunca afirme que uma ação foi concluída antes de receber sucesso" in instrucoes
+    assert "Não dê diagnóstico" in instrucoes
+
+
 def test_cliente_gemini_executa_ferramenta_sem_expor_artefato(monkeypatch):
     import ai_service
 
@@ -1126,6 +1141,7 @@ def test_cliente_gemini_executa_ferramenta_sem_expor_artefato(monkeypatch):
     assert resultado.ferramentas_usadas == ["listar_medicos_da_clinica"]
     assert chamadas_api[0]["messages"][0]["role"] == "system"
     assert chamadas_api[0]["tools"][0]["type"] == "function"
+    assert chamadas_api[0]["temperature"] == ai_service.GEMINI_TEMPERATURE
     assert chamadas_api[1]["messages"][-1]["role"] == "tool"
     assert "_artefato" not in chamadas_api[1]["messages"][-1]["content"]
     buscar_horarios = next(
