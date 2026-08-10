@@ -1084,6 +1084,9 @@ def test_assistente_medico_grafico_conta_somente_pacientes_do_profissional(clien
 def test_cliente_responses_repassa_function_call_sem_armazenar_no_provedor(monkeypatch):
     import ai_service
 
+    monkeypatch.setattr(ai_service, "AI_PROVIDER", "openai")
+    monkeypatch.setattr(ai_service, "AI_ENABLED", True)
+    monkeypatch.setattr(ai_service, "OPENAI_API_KEY", "chave-de-teste")
     chamadas_api = []
     respostas = iter([
         {"output": [{
@@ -1125,16 +1128,75 @@ def test_cliente_responses_repassa_function_call_sem_armazenar_no_provedor(monke
     assert "_artefato" not in chamadas_api[1]["input"][-1]["output"]
 
 
-def test_assistente_sem_chave_informa_indisponibilidade(client):
+def test_assistente_local_agenda_sem_api_externa(monkeypatch):
+    import ai_service
+
+    monkeypatch.setattr(ai_service, "AI_PROVIDER", "local")
+    monkeypatch.setattr(ai_service, "AI_ENABLED", True)
+    monkeypatch.setattr(ai_service, "OPENAI_API_KEY", None)
+    chamadas = []
+
+    def executar(nome, argumentos):
+        chamadas.append((nome, argumentos))
+        if nome == "listar_medicos_da_clinica":
+            return {"ok": True, "medicos": [{
+                "id": 7, "nome": "Dra. Ana", "especialidade": "Clínica Geral",
+                "tipos_consulta": [{
+                    "id": 3, "nome": "Consulta", "duracao_minutos": 30, "e_retorno": False,
+                }],
+            }]}
+        if nome == "buscar_horarios_disponiveis":
+            return {
+                "ok": True,
+                "medico": {"id": 7, "nome": "Dra. Ana"},
+                "tipo_consulta": {"id": 3, "nome": "Consulta", "duracao_minutos": 30},
+                "disponibilidade": [{"data": "2099-08-15", "horarios": ["09:00", "09:30"]}],
+            }
+        if nome == "agendar_minha_consulta":
+            return {
+                "ok": True,
+                "agendamento": {
+                    "id": 12, "medico": "Dra. Ana", "tipo": "Consulta",
+                    "data_hora": "2099-08-15T09:00", "status": "Confirmado",
+                },
+                "_artefato": {"tipo": "agendamento", "titulo": "Consulta confirmada"},
+            }
+        raise AssertionError(nome)
+
+    resultado = ai_service.executar_assistente(
+        instrucoes="Fluxo local.",
+        historico=[{
+            "role": "user",
+            "content": "Marque com o médico #7 em 15/08/2099 às 09:00, tipo #3.",
+        }],
+        ferramentas=[
+            {"name": "consultar_ajuda_plataforma"},
+            {"name": "listar_medicos_da_clinica"},
+            {"name": "buscar_horarios_disponiveis"},
+            {"name": "agendar_minha_consulta"},
+            {"name": "listar_meus_agendamentos"},
+        ],
+        executar_ferramenta=executar,
+        identificador_seguranca="nao-usado-no-modo-local",
+    )
+    assert "confirmada" in resultado.texto
+    assert resultado.artefatos == [{"tipo": "agendamento", "titulo": "Consulta confirmada"}]
+    assert [nome for nome, _ in chamadas] == [
+        "listar_medicos_da_clinica", "buscar_horarios_disponiveis", "agendar_minha_consulta",
+    ]
+
+
+def test_assistente_local_funciona_sem_chave(client):
     headers_admin = criar_admin(client)
     status = client.get("/assistente/status", headers=headers_admin)
     assert status.status_code == 200
-    assert status.json()["disponivel"] is False
+    assert status.json()["disponivel"] is True
+    assert status.json()["modelo"] == "local-gratuito"
     resposta = client.post("/assistente/mensagens", headers=headers_admin, json={
         "mensagem": "Como uso o portal?", "pagina": "index.html",
     })
-    assert resposta.status_code == 503
-    assert "ativado" in resposta.json()["detail"]
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["mensagem"]["conteudo"]
 
 
 def teardown_module():

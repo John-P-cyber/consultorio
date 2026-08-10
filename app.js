@@ -267,7 +267,7 @@
             };
             adicionarMensagem('assistant', statusAssistente.disponivel
                 ? (textos[statusAssistente.role] || 'Olá! Como posso ajudar com o portal?')
-                : 'O BotIA está instalado, mas ainda precisa da chave da API da OpenAI para responder. Peça ao administrador para configurar OPENAI_API_KEY.');
+                : 'O assistente foi desativado pelo administrador da plataforma.');
         };
         const carregarConversa = async () => {
             if (carregada) return;

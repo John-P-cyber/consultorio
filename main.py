@@ -30,6 +30,7 @@ from ai_service import (
     FalhaAssistente,
     assistente_disponivel,
     executar_assistente,
+    modelo_assistente_ativo,
 )
 from communication_service import (
     FalhaNoProvedor,
@@ -54,7 +55,6 @@ from config import (
     ACCESS_COOKIE_NAME,
     ACCESS_TOKEN_EXPIRE_MINUTES,
     AI_CONVERSATION_RETENTION_DAYS,
-    AI_MODEL,
     AI_RATE_LIMIT_PER_MINUTE,
     ALLOWED_ORIGINS,
     APP_ENV,
@@ -1853,7 +1853,7 @@ def _verificar_limite_assistente(usuario: models.Usuario, db: Session) -> None:
 def status_assistente(usuario: models.Usuario = Depends(exigir_roles("admin", "paciente", "medico"))):
     return schemas.AssistenteStatusResponse(
         disponivel=assistente_disponivel(),
-        modelo=AI_MODEL if assistente_disponivel() else None,
+        modelo=modelo_assistente_ativo(),
         role=usuario.role,
     )
 

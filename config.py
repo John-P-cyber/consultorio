@@ -69,6 +69,7 @@ COMMUNICATION_WORKER_ENABLED = os.getenv("COMMUNICATION_WORKER_ENABLED", "false"
 }
 COMMUNICATION_WORKER_INTERVAL_SECONDS = int(os.getenv("COMMUNICATION_WORKER_INTERVAL_SECONDS", "300"))
 AI_ENABLED = os.getenv("AI_ENABLED", "true").lower() in {"1", "true", "yes", "sim"}
+AI_PROVIDER = (os.getenv("AI_PROVIDER") or "local").strip().lower()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL") or "gpt-5.6-luna"
@@ -137,6 +138,8 @@ if not re.fullmatch(r"v[0-9]+\.[0-9]+", WHATSAPP_API_VERSION):
     raise RuntimeError("WHATSAPP_API_VERSION deve usar o formato vNN.N.")
 if COMMUNICATION_WORKER_INTERVAL_SECONDS < 60 or COMMUNICATION_WORKER_INTERVAL_SECONDS > 3600:
     raise RuntimeError("COMMUNICATION_WORKER_INTERVAL_SECONDS deve estar entre 60 e 3600.")
+if AI_PROVIDER not in {"local", "openai"}:
+    raise RuntimeError("AI_PROVIDER deve ser 'local' ou 'openai'.")
 if AI_REASONING_EFFORT not in {"none", "low", "medium", "high", "xhigh", "max"}:
     raise RuntimeError("AI_REASONING_EFFORT deve ser none, low, medium, high, xhigh ou max.")
 if AI_TIMEOUT_SECONDS < 5 or AI_TIMEOUT_SECONDS > 120:
